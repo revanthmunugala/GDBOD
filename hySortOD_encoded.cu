@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <iostream>
 #include <string.h>
 #include <unistd.h>
 #include <map>
@@ -12,16 +13,11 @@ using namespace std;
 
 #define NONE -1
 #define MY_DATATYPE unsigned int
+const string approach[] = {"Naive", "Tree"};
+const string treeSelect[] = {"Simple", "Locality optimized", "Locality and traversal optimized"};
 
 // Global variable
-int DIM = 384;
-
-// compile
-// nvcc HySortOd.c -lm -o HySortOd
-
-// run example with 10 lines 3 dimensions 4 partitions per dim(Bin)
-// 100(MINSPLIT) No normalization(0) dataset_fixed(dataset)
-// ./HySortOd 10 3 4 100 0 dataset_fixed.txt
+//int DIM = 384;
 
 typedef struct treeNode {
     int coordinate;
@@ -227,7 +223,7 @@ __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
 
 __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
                               int *childCount, int *dimStart, int *curCount,
-                              int curDim, int N, int MINSPLIT) {
+                              int curDim, int N, int MINSPLIT, int DIM) {
     if (curDim == DIM) {
         return;
     }
@@ -290,7 +286,7 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
     }
 
     buildLinearTree(hypercube, linearTree, childCount, dimStart, curCount,
-                    curDim + 1, N, MINSPLIT);
+                    curDim + 1, N, MINSPLIT, DIM);
     return;
 }
 
@@ -414,7 +410,6 @@ __global__ void neighborhoodDensity(int *density, int *instancesCount,
         }
 
     }
-
 
     return;
 }
@@ -635,9 +630,9 @@ __host__ void copyNode(optimTreeNode *root, treeNode *linearCurNode, optimTreeNo
     return;
 }
 
-__host__ void buildSuperOptimTree(treeNode *linearTree, optimTreeNode *superOptimTree) {
-
-    // Set initial Node
+__host__ void buildSuperOptimTree(treeNode *linearTree, optimTreeNode *superOptimTree) 
+{
+    
     (*superOptimTree).coordinate = (*linearTree).coordinate;
     (*superOptimTree).startIndex = (*linearTree).startIndex;
     (*superOptimTree).endIndex = (*linearTree).endIndex;
@@ -708,19 +703,22 @@ int findK(int BIN)
     return k;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
+    
     // Process command-line arguments
-    int N = 5000;
-    int BIN = 5;
-    int MINSPLIT = 100;
-    int NORMALIZE = 1;
-    char inputFname[500] = "tiny.txt";
-
-    // Fix this in the end. Make program file dynamic
-    /*
-    if (argc != 7)
+    int N;
+    int DIM;
+    int BIN;
+    int MINSPLIT; // MINSPLIT = 0 defaults to naive strategy
+    int NORMALIZE = 1; // Set to 1 to normalize datasets - Does not affect timeTrails
+    char inputFname[500] = ""; // Dataset
+    int APPROACH = 1; // 0 for Naive strategy and 1 for Tree strategy
+    int TREE_SELECT = 3; // Optional parameter (default -3) 1 for simple tree, 2 for tree with optimized locality, 3 for tree with optimized locality and traversal, Use 0 for naive strategy
+    
+    if (argc != 9)
     {
-        fprintf(stderr, "Please provide the following on the command line: N (number of lines in the file), dimensionality (number of coordinates per point/feature vector), BIN (Bin parameter), Min Split(Threshold), Normalize (0 or 1)dataset filename. Your input: %s\n", argv[0]);
+        fprintf(stderr, "Please provide the following on the command line: N (number of lines in the file), dimensionality (number of coordinates per point/feature vector), BIN (Bin parameter), Min Split(Threshold), Normalize (0 or 1), dataset filename. ");
          return 0;
     }
 
@@ -730,31 +728,38 @@ int main(int argc, char **argv) {
     sscanf(argv[4], "%d", &MINSPLIT);
     sscanf(argv[5], "%d", &NORMALIZE);
     strcpy(inputFname, argv[6]);
-    */
-
-    // pointer to entire dataset
-    double *h_dataset;
-
-    if (N < 1 || DIM < 1 || BIN < 1 || NORMALIZE > 1 || NORMALIZE < 0) {
-        printf("\nOne of the following are invalid: N, DIM, BIN , NORMALIZE\n");
+    sscanf(argv[7], "%d", &APPROACH);
+    sscanf(argv[8], "%d", &TREE_SELECT);
+    
+    if (N < 1 || DIM < 1 || BIN < 1 || MINSPLIT<0 || NORMALIZE > 1 || NORMALIZE < 0 || APPROACH < 0 || APPROACH > 1 || TREE_SELECT < 0 || TREE_SELECT > 3) {
+        cout << "\nOne of the following are invalid: N, DIM, BIN , NORMALIZE, APPROACH, TREE_SELECT " << endl;
         return 0;
     } else {
 
-        printf("\nNumber of lines (N): %d, Dimensionality: %d, BIN Size: %d, "
-               "MinSplit: %d,Normalize: %d, Filename: %s\n",
-               N, DIM, BIN, MINSPLIT, NORMALIZE, inputFname
-        );
+        string currentTreeSelect = "NONE";
 
-        // allocate memory for dataset
-        h_dataset = (double *) malloc(sizeof(double) * N * DIM);
-
-        int ret = importDataset(inputFname, N, h_dataset, DIM);
-
-        if (ret == 1) {
-            return 0;
+        if(APPROACH == 1)
+        {
+            currentTreeSelect = treeSelect[TREE_SELECT-1];
         }
+
+        cout << "\nNumber of lines (N): " << N << " Dimensionality: " << DIM << " BIN Size: "<< BIN
+               << " MinSplit: " << MINSPLIT << " Normalize: " <<NORMALIZE << " Filename: " << inputFname << " Approach: " << approach[APPROACH]
+               << " Selected tree: " << currentTreeSelect << endl;
+
     }
 
+
+     // allocate memory for dataset
+        // pointer to entire dataset
+    double *h_dataset = (double *) malloc(sizeof(double) * N * DIM);
+
+    int ret = importDataset(inputFname, N, h_dataset, DIM);
+
+    if (ret == 1) {
+        return 0;
+    }
+    
     if (NORMALIZE == 1) {
         normalizeDataset(h_dataset, N, DIM);
     }
@@ -783,34 +788,20 @@ int main(int argc, char **argv) {
     dim3 dimGrid(ceil((float) N / (float) totalElementsPerBlock), 1, 1);
     dim3 dimBlock(blockDim, 1, 1);
 
-    // Adding dynamic bit shifting logic
     int k = findK(BIN);
 
-    printf("The value of k is %d\n",k);
-
     int dimPerBlock = floor((double)(sizeof(MY_DATATYPE)*8)/(double)k);
-
-    printf("The value of dimPerBlock is %d\n",dimPerBlock);
-
+  
     int encodeBlockSize = ceil((double) DIM / (double) dimPerBlock);
 
-    printf("The value of encodeBlockSize is %d\n",encodeBlockSize);
-
-    // Dynamic bit shifting logic
-    //int *d_hypercube = NULL;
     MY_DATATYPE *d_hypercube = nullptr;
 
-    // Modifying below
     double *d_dataset = nullptr;
 
     printf("Grid - %.0f , Block - %d\n", ceil((float) N / (float) totalElementsPerBlock), blockDim);
 
-    // Modifying below code
-    // int *h_hypercube = (int *) calloc(encodeBlockSize * N, sizeof(int));
     MY_DATATYPE*h_hypercube = (MY_DATATYPE *) calloc(encodeBlockSize * N, sizeof(MY_DATATYPE));
 
-    // Dynamic bit shifting logic
-    // cudaMalloc((void **) &d_hypercube, (sizeof(int) * N * encodeBlockSize));
     cudaMalloc((void **) &d_hypercube, (sizeof(MY_DATATYPE) * N * encodeBlockSize));
 
     cudaMalloc((void **) &d_dataset, sizeof(double) * totalElements);
@@ -818,8 +809,6 @@ int main(int argc, char **argv) {
     cudaMemcpy(d_dataset, h_dataset, sizeof(double) * totalElements,
                cudaMemcpyHostToDevice);
 
-    // Dynamic bit shifting logic
-    // cudaMemcpy(d_hypercube, h_hypercube, (sizeof(int) * N * encodeBlockSize), cudaMemcpyHostToDevice);
     cudaMemcpy(d_hypercube, h_hypercube, (sizeof(MY_DATATYPE) * N * encodeBlockSize), cudaMemcpyHostToDevice);
 
     // Record time
@@ -842,21 +831,16 @@ int main(int argc, char **argv) {
     float createHypercubeTime = 0;
     cudaEventElapsedTime(&createHypercubeTime, createHypercubeStart, createHypercubeStop);
 
-    // Dynamic bit shifting logic
-    // cudaMemcpy(h_hypercube, d_hypercube, (sizeof(int) * N * encodeBlockSize), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_hypercube, d_hypercube, (sizeof(MY_DATATYPE) * N * encodeBlockSize), cudaMemcpyDeviceToHost);
 
     // Improve memory util
     cudaFree(d_dataset);
     cudaFree(d_hypercube);
 
-    // Dynamic bit shifting logic
-    //map <vector<int>, vector<int>> h_hypercube_mapper;
     map <vector<MY_DATATYPE>, vector<int>> h_hypercube_mapper;
 
     for (int i = 0; i + encodeBlockSize <= N * encodeBlockSize; i = i + encodeBlockSize) {
-        // Dynamic bit shifting logic
-        //vector<int> h_hypercube_key(h_hypercube + i, h_hypercube + i + encodeBlockSize);
+
         vector<MY_DATATYPE> h_hypercube_key(h_hypercube + i, h_hypercube + i + encodeBlockSize);
 
         if (h_hypercube_mapper.find(h_hypercube_key) == h_hypercube_mapper.end()) {
@@ -870,19 +854,16 @@ int main(int argc, char **argv) {
 
     int distinctHypercubeCount = 0;
     MY_DATATYPE* h_hypercubeDistinct = nullptr;
-    // int *h_hypercubeDistinct = nullptr;
+
     int *h_instancesCount = nullptr;
 
-    // Build a linear array for building hypercube array
+
     distinctHypercubeCount = h_hypercube_mapper.size();
-    // Dynamic bit shifting logic
-    // h_hypercubeDistinct = (int *) malloc(sizeof(int) * distinctHypercubeCount * encodeBlockSize);
+
     h_hypercubeDistinct = (MY_DATATYPE *) malloc(sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize);
 
     h_instancesCount = (int *) malloc(sizeof(int) * distinctHypercubeCount);
     
-    // Dynamic bit shifting logic
-    // map < vector < int > , vector < int > > ::iterator
     map < vector <MY_DATATYPE> , vector < int > > ::iterator itr;
 
     int hypercubePos = 0;
@@ -898,8 +879,6 @@ int main(int argc, char **argv) {
 
     totalElements = distinctHypercubeCount * DIM;
 
-    // Dynamic bit shifting logic
-    //int *d_hypercubeDistinct;
     MY_DATATYPE *d_hypercubeDistinct;
 
     int *d_hypercubeArray;
@@ -909,20 +888,10 @@ int main(int argc, char **argv) {
     cudaMalloc((void **) &d_hypercubeDistinct,
                sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize);
 
-    /*
-    cudaMalloc((void **) &d_hypercubeDistinct,
-               sizeof(int) * distinctHypercubeCount * encodeBlockSize);
-    */
-
     cudaMalloc((void **) &d_hypercubeArray, sizeof(int) * totalElements);
 
     cudaMemcpy(d_hypercubeDistinct, h_hypercubeDistinct, sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize,
                cudaMemcpyHostToDevice);
-
-    /*
-    cudaMemcpy(d_hypercubeDistinct, h_hypercubeDistinct, sizeof(int) * distinctHypercubeCount * encodeBlockSize,
-               cudaMemcpyHostToDevice);
-    */
 
     dimGrid.x = ceil((float) totalElements / (float) blockDim);
 
@@ -934,7 +903,6 @@ int main(int argc, char **argv) {
     cudaEventCreate(&buildHypercubeArrayStop);
 
     cudaEventRecord(buildHypercubeArrayStart);
-
 
     buildHypercubeArray<<<dimGrid, dimBlock>>>(
             d_hypercubeDistinct, d_hypercubeArray, distinctHypercubeCount, DIM, encodeBlockSize, k);
@@ -1008,7 +976,7 @@ int main(int argc, char **argv) {
         cudaEventRecord(buildTreeStart);
 
         buildLinearTree(h_hypercubeArray, &h_linearTree, h_childCount, h_dimStart,
-                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT);
+                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT, DIM);
 
         cudaDeviceSynchronize();
 
@@ -1156,11 +1124,7 @@ int main(int argc, char **argv) {
             maxNeighborhoodDensity);
     clock_t end = clock();
     
-    /*
-    for (int i = 0; i < N; i++) {
-        printf("Index: %d - %f\n",i,h_outlierScore[i]);
-    }
-    */
+   
     
     cudaDeviceSynchronize();
     cudaEventRecord(totalTimeStop);
@@ -1192,9 +1156,7 @@ int main(int argc, char **argv) {
     }
 
     // free dataset
-
     free(h_dataset);
-
 
     return 0;
 }
