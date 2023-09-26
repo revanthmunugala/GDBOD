@@ -163,7 +163,9 @@ __global__ void buildHypercubeArray(MY_DATATYPE *hypercube, int *hypercubeArray,
 }
 
 __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
-                         int coordinate, int parentIndex, int *curCount) {
+                         int coordinate, int parentIndex, int *curCount) 
+                         {
+
     treeNode *curNode = (treeNode *) malloc(sizeof(treeNode));
     curNode->startIndex = startIndex;
     curNode->endIndex = endIndex;
@@ -202,7 +204,9 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
     int dimensionStart = dimStart[curDim];
     int dimensionEnd = curDimElementCount + dimensionStart;
 
-    for (int i = dimensionStart; i < dimensionEnd; i++) {
+    for (int i = dimensionStart; i < dimensionEnd; i++) 
+    {
+
         if (curDim + 1 < DIM) {
             dimStart[curDim + 1] = i + 1;
         }
@@ -216,7 +220,8 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
 
         int curValue = hypercube[startIndex * DIM + curDim];
         int curChildCount = 0;
-        for (int j = startIndex; j <= endIndex; j++) {
+        for (int j = startIndex; j <= endIndex; j++) 
+        {
 
             if (hypercube[j * DIM + curDim] > curValue) {
 
@@ -252,7 +257,6 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
                     curDim + 1, N, MINSPLIT, DIM);
     return;
 }
-
 
 __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                              int curIndex) {
@@ -364,6 +368,44 @@ __global__ void neighborhoodDensity(int *density, int *instancesCount,
         if (threadId < totalNodes) {
             int hypercubeIndex = threadId / initialDimNodeCount;
             int parentIndex = dimNodes[threadId % initialDimNodeCount];
+
+            int curThreadDensity = neighborDensitySubTree(hypercubeArray, linearTree, hypercubeIndex, childCount,
+                                                          dimStart,
+                                                          instancesCount, parentIndex, 1, hypercubeCount, DIM);
+
+            atomicAdd(density + hypercubeIndex, curThreadDensity);
+        }
+
+    }
+
+    return;
+}
+
+__global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
+                                    treeNode *linearTree, int *dimStart,
+                                    int *hypercubeArray, int *childCount, int DIM,
+                                    int hypercubeCount) 
+                                    {
+
+    int threadId = threadIdx.x + blockIdx.x * blockDim.x;
+    int initialDimNodeCount = childCount[0];
+    int totalNodes = hypercubeCount * initialDimNodeCount;
+
+    if (initialDimNodeCount == 0) {
+        if (threadId < hypercubeCount) {
+            int hypercubeIndex = threadId;
+            int parentIndex = 0;
+            int curThreadDensity = neighborDensitySubTree(hypercubeArray, linearTree, hypercubeIndex, childCount,
+                                                          dimStart,
+                                                          instancesCount, parentIndex, 1, hypercubeCount, DIM);
+
+            atomicAdd(density + hypercubeIndex, curThreadDensity);
+        }
+
+    } else {
+        if (threadId < totalNodes) {
+            int hypercubeIndex = threadId / initialDimNodeCount;
+            int parentIndex = (threadId % initialDimNodeCount) + 1;
 
             int curThreadDensity = neighborDensitySubTree(hypercubeArray, linearTree, hypercubeIndex, childCount,
                                                           dimStart,
@@ -664,4 +706,404 @@ int findK(int BIN)
     }
 
     return k;
+}
+
+float naiveStrategy(int*d_hypercubeArray, int*h_neighborhoodDensity, int* h_instancesCount, int distinctHypercubeCount,int BIN, int DIM)
+{
+
+    cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop;
+        float neighborhoodDensityTime;
+
+        int *d_neighborhoodDensity = NULL;
+
+        cudaMalloc((void **) &d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount);
+    
+        cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+        int *d_instancesCount = NULL;
+
+        cudaMalloc((void **) &d_instancesCount, sizeof(int) * distinctHypercubeCount);
+
+        cudaMemcpy(d_instancesCount, h_instancesCount,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+        
+        // Use naive approach when approach is 0 or when MINSPLIT = 0
+        dim3 dimBlock,dimGrid;
+
+        dimBlock.x = 256;
+        int SPLIT = BIN;
+        dimGrid.x = ceil((float) (distinctHypercubeCount * SPLIT) / (float) (dimBlock.x));
+
+        cudaEventCreate(&neighborhoodDensityStart);
+        cudaEventCreate(&neighborhoodDensityStop);
+        cudaEventRecord(neighborhoodDensityStart);
+
+        naiveNeighborhoodDensity<<<dimGrid, dimBlock>>>(d_neighborhoodDensity, d_instancesCount, DIM,
+                                                        distinctHypercubeCount, d_hypercubeArray, SPLIT);
+
+        cudaDeviceSynchronize();
+        cudaEventRecord(neighborhoodDensityStop);
+        cudaEventSynchronize(neighborhoodDensityStop);
+        cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
+
+        cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
+
+    return neighborhoodDensityTime;
+}
+
+
+__host__ float finalOptimTreeStrategy(int* h_hypercubeArray, int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT)
+{
+    puts("Using locality and traversal optimized tree");
+    
+    cudaMemcpy(h_hypercubeArray, d_hypercubeArray, sizeof(int) * distinctHypercubeCount*DIM,
+                   cudaMemcpyDeviceToHost);
+
+    int *d_neighborhoodDensity = NULL;
+
+    cudaMalloc((void **) &d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount);
+    
+    cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+    int *d_instancesCount = NULL;
+
+    cudaMalloc((void **) &d_instancesCount, sizeof(int) * distinctHypercubeCount);
+
+    cudaMemcpy(d_instancesCount, h_instancesCount,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+        // Build a linear tree
+
+        cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop;
+        float neighborhoodDensityTime;
+
+        treeNode *h_linearTree = NULL;
+        
+        int linearTreeCount = 0;
+        int curDim = 0;
+
+        int *h_childCount = (int *) calloc((DIM + 1), sizeof(int));
+        int *h_dimStart = (int *) calloc((DIM + 1), sizeof(int));
+
+        appendNode(&h_linearTree, 0, distinctHypercubeCount - 1, NONE, NONE,
+                   &linearTreeCount);
+
+        buildLinearTree(h_hypercubeArray, &h_linearTree, h_childCount, h_dimStart,
+                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT, DIM);
+
+        // Build locality optimized tree
+        printf("Tree node count: %d\n",linearTreeCount);
+
+        printf("Optim tree build start\n");
+
+        treeNode *h_optimizedLinearTree =
+                (treeNode *) malloc(sizeof(treeNode) * linearTreeCount);
+
+
+        int *h_dimNodes = (int *) malloc(sizeof(int) * h_childCount[0]);
+
+        buildOptimizedLinearTree(h_linearTree, h_optimizedLinearTree, h_dimNodes);
+
+        puts("Locality optimized tree build done");
+    
+        // Starting build for super optimized tree
+        optimTreeNode *h_superOptimTree = (optimTreeNode *) malloc(sizeof(optimTreeNode) * linearTreeCount);
+
+        buildSuperOptimTree(h_optimizedLinearTree, h_superOptimTree);
+
+        puts("Super Optimized Tree build done!!");
+
+        // Count neighborhood density of hypercubes
+
+        h_dimStart[DIM] = h_childCount[DIM - 2] + h_dimStart[DIM - 1];
+
+        optimTreeNode *d_linearTree = NULL;
+        int *d_dimStart = NULL;
+        int *d_childCount = NULL;
+
+        int *d_dimNodes = NULL;
+
+        cudaMalloc((void **) &d_dimNodes, sizeof(int) * h_childCount[0]);
+
+        cudaMemcpy(d_dimNodes, h_dimNodes,
+                   sizeof(int) * h_childCount[0], cudaMemcpyHostToDevice);
+
+        cudaMalloc((void **) &d_linearTree, sizeof(optimTreeNode) * linearTreeCount);
+
+        cudaMalloc((void **) &d_dimStart, sizeof(int) * (DIM + 1));
+
+        cudaMalloc((void **) &d_childCount, sizeof(int) * (DIM + 1));
+
+
+        cudaMemcpy(d_linearTree, h_superOptimTree, sizeof(optimTreeNode) * linearTreeCount,
+                   cudaMemcpyHostToDevice);
+
+
+        cudaMemcpy(d_dimStart, h_dimStart, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+
+        cudaMemcpy(d_childCount, h_childCount, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+
+        dim3 dimBlock,dimGrid;
+        dimBlock.x = 256;
+
+        if (h_childCount[0] == 0) {
+            dimGrid.x = ceil((float) (distinctHypercubeCount) / (float) (dimBlock.x));
+        } else {
+            dimGrid.x = ceil((float) (distinctHypercubeCount * h_childCount[0]) / (float) (dimBlock.x));
+        }
+
+        printf("Starting to process %d hypercubes\n", distinctHypercubeCount);
+        // Record time here
+
+        cudaEventCreate(&neighborhoodDensityStart);
+        cudaEventCreate(&neighborhoodDensityStop);
+
+        cudaEventRecord(neighborhoodDensityStart);
+
+        optimNeighborhoodDensity<<<dimGrid, dimBlock>>>(
+                d_neighborhoodDensity, d_instancesCount, d_linearTree, d_hypercubeArray,
+                d_childCount, DIM, distinctHypercubeCount, d_dimNodes);
+
+        cudaDeviceSynchronize();
+
+        cudaEventRecord(neighborhoodDensityStop);
+        cudaEventSynchronize(neighborhoodDensityStop);
+
+        cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
+
+        cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
+
+    return neighborhoodDensityTime;
+}
+
+
+__host__ float localityOptimTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT)
+{
+    puts("Using locality optimized tree");
+
+    cudaMemcpy(h_hypercubeArray, d_hypercubeArray, sizeof(int) * distinctHypercubeCount*DIM,
+                   cudaMemcpyDeviceToHost);
+
+    int *d_neighborhoodDensity = NULL;
+
+    cudaMalloc((void **) &d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount);
+    
+    cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+    int *d_instancesCount = NULL;
+
+    cudaMalloc((void **) &d_instancesCount, sizeof(int) * distinctHypercubeCount);
+
+    cudaMemcpy(d_instancesCount, h_instancesCount,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+        // Build a linear tree
+
+        cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop;
+        float neighborhoodDensityTime;
+
+        treeNode *h_linearTree = NULL;
+        
+        int linearTreeCount = 0;
+        int curDim = 0;
+
+        int *h_childCount = (int *) calloc((DIM + 1), sizeof(int));
+        int *h_dimStart = (int *) calloc((DIM + 1), sizeof(int));
+
+        appendNode(&h_linearTree, 0, distinctHypercubeCount - 1, NONE, NONE,
+                   &linearTreeCount);
+
+        buildLinearTree(h_hypercubeArray, &h_linearTree, h_childCount, h_dimStart,
+                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT, DIM);
+
+        // Build locality optimized tree
+
+        printf("Optim tree build start\n");
+
+        treeNode *h_optimizedLinearTree =
+                (treeNode *) malloc(sizeof(treeNode) * linearTreeCount);
+
+
+        int *h_dimNodes = (int *) malloc(sizeof(int) * h_childCount[0]);
+
+        buildOptimizedLinearTree(h_linearTree, h_optimizedLinearTree, h_dimNodes);
+
+        puts("Locality optimized tree build done");
+    
+        // Count neighborhood density of hypercubes
+
+        // IMPORTANT
+        // Check if this line is important
+        h_dimStart[DIM] = h_childCount[DIM - 2] + h_dimStart[DIM - 1];
+
+        treeNode *d_linearTree = NULL;
+        int *d_dimStart = NULL;
+        int *d_childCount = NULL;
+
+        int *d_dimNodes = NULL;
+
+        cudaMalloc((void **) &d_dimNodes, sizeof(int) * h_childCount[0]);
+
+        cudaMemcpy(d_dimNodes, h_dimNodes,
+                   sizeof(int) * h_childCount[0], cudaMemcpyHostToDevice);
+
+        cudaMalloc((void **) &d_linearTree, sizeof(treeNode) * linearTreeCount);
+
+        cudaMemcpy(d_linearTree, h_optimizedLinearTree, sizeof(treeNode) * linearTreeCount,
+                   cudaMemcpyHostToDevice);
+
+        cudaMalloc((void **) &d_dimStart, sizeof(int) * (DIM + 1));
+
+        cudaMemcpy(d_dimStart, h_dimStart, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+        
+        cudaMalloc((void **) &d_childCount, sizeof(int) * (DIM + 1));
+        
+        cudaMemcpy(d_childCount, h_childCount, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+        
+
+        dim3 dimBlock,dimGrid;
+        dimBlock.x = 256;
+
+        if (h_childCount[0] == 0) {
+            dimGrid.x = ceil((float) (distinctHypercubeCount) / (float) (dimBlock.x));
+        } else {
+            dimGrid.x = ceil((float) (distinctHypercubeCount * h_childCount[0]) / (float) (dimBlock.x));
+        }
+        
+        printf("Starting to process %d hypercubes\n", distinctHypercubeCount);
+        // Record time here
+
+        cudaEventCreate(&neighborhoodDensityStart);
+        cudaEventCreate(&neighborhoodDensityStop);
+
+        cudaEventRecord(neighborhoodDensityStart);
+        
+        neighborhoodDensity<<< dimGrid, dimBlock>>>(
+            d_neighborhoodDensity, d_instancesCount, d_linearTree, d_dimStart, d_hypercubeArray, d_childCount,
+            DIM, distinctHypercubeCount, d_dimNodes);
+
+        cudaDeviceSynchronize();
+
+        cudaEventRecord(neighborhoodDensityStop);
+        cudaEventSynchronize(neighborhoodDensityStop);
+
+        cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
+
+        cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
+
+    return neighborhoodDensityTime;
+}
+
+__host__ float simpleTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT)
+{
+    puts("Using simple tree");
+
+    // Variable declaration
+    cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop;
+
+    int *d_neighborhoodDensity = NULL;
+    int *d_instancesCount = NULL;
+    int *d_dimStart = NULL;
+    int *d_childCount = NULL;
+    
+    treeNode *h_linearTree = NULL;
+    treeNode *d_linearTree = NULL;
+        
+    float neighborhoodDensityTime;
+
+    int linearTreeCount = 0;
+    int curDim = 0;
+
+    dim3 dimBlock,dimGrid;
+
+
+    cudaMemcpy(h_hypercubeArray, d_hypercubeArray, sizeof(int) * distinctHypercubeCount*DIM,
+                   cudaMemcpyDeviceToHost);
+
+    cudaMalloc((void **) &d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount);
+    
+    cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+    cudaMalloc((void **) &d_instancesCount, sizeof(int) * distinctHypercubeCount);
+
+    cudaMemcpy(d_instancesCount, h_instancesCount,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
+
+    // Build a linear tree
+
+    int *h_childCount = (int *) calloc((DIM + 1), sizeof(int));
+    int *h_dimStart = (int *) calloc((DIM + 1), sizeof(int));
+
+    appendNode(&h_linearTree, 0, distinctHypercubeCount - 1, NONE, NONE,
+                   &linearTreeCount);
+
+        
+    buildLinearTree(h_hypercubeArray, &h_linearTree, h_childCount, h_dimStart,
+                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT, DIM);
+        
+        // IMPORTANT
+        // Check if this line is important
+    h_dimStart[DIM] = h_childCount[DIM - 2] + h_dimStart[DIM - 1];
+
+    cudaMalloc((void **) &d_linearTree, sizeof(treeNode) * linearTreeCount);
+
+    cudaMemcpy(d_linearTree, h_linearTree, sizeof(treeNode) * linearTreeCount,
+                   cudaMemcpyHostToDevice);
+
+    cudaMalloc((void **) &d_dimStart, sizeof(int) * (DIM + 1));
+
+    cudaMemcpy(d_dimStart, h_dimStart, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+        
+    cudaMalloc((void **) &d_childCount, sizeof(int) * (DIM + 1));
+        
+    cudaMemcpy(d_childCount, h_childCount, sizeof(int) * (DIM + 1),
+                   cudaMemcpyHostToDevice);
+        
+        
+    dimBlock.x = 256;
+
+    if (h_childCount[0] == 0) 
+    {
+        dimGrid.x = ceil((float) (distinctHypercubeCount) / (float) (dimBlock.x));
+    } else 
+    {
+        dimGrid.x = ceil((float) (distinctHypercubeCount * h_childCount[0]) / (float) (dimBlock.x));
+    }
+        
+    cudaEventCreate(&neighborhoodDensityStart);
+    cudaEventCreate(&neighborhoodDensityStop);        
+    cudaEventRecord(neighborhoodDensityStart);
+        
+        // Added custom neigborhood density function here
+    simpleNeighborhoodDensity<<< dimGrid, dimBlock>>>(
+            d_neighborhoodDensity, d_instancesCount, d_linearTree, d_dimStart, d_hypercubeArray, d_childCount,
+            DIM, distinctHypercubeCount);
+
+    cudaDeviceSynchronize();
+
+    cudaEventRecord(neighborhoodDensityStop);
+    cudaEventSynchronize(neighborhoodDensityStop);
+
+    cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
+
+    cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
+               sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
+
+    return neighborhoodDensityTime;
 }

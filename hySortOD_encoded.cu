@@ -4,7 +4,6 @@ using namespace std;
 
 int main(int argc, char **argv) 
 {
-    
     // Process command-line arguments
     int N;
     int DIM;
@@ -47,7 +46,6 @@ int main(int argc, char **argv)
                << " Selected tree: " << currentTreeSelect << endl;
 
     }
-
 
      // allocate memory for dataset
         // pointer to entire dataset
@@ -96,8 +94,6 @@ int main(int argc, char **argv)
     MY_DATATYPE *d_hypercube = nullptr;
 
     double *d_dataset = nullptr;
-
-    printf("Grid - %.0f , Block - %d\n", ceil((float) N / (float) totalElementsPerBlock), blockDim);
 
     MY_DATATYPE*h_hypercube = (MY_DATATYPE *) calloc(encodeBlockSize * N, sizeof(MY_DATATYPE));
 
@@ -155,7 +151,6 @@ int main(int argc, char **argv)
     MY_DATATYPE* h_hypercubeDistinct = nullptr;
 
     int *h_instancesCount = nullptr;
-
 
     distinctHypercubeCount = h_hypercube_mapper.size();
 
@@ -215,206 +210,45 @@ int main(int argc, char **argv)
     cudaEventElapsedTime(&buildHypercubeArrayTime, buildHypercubeArrayStart, buildHypercubeArrayStop);
 
     int *h_neighborhoodDensity = (int *) calloc(distinctHypercubeCount, sizeof(int));
-    int *d_neighborhoodDensity = NULL;
-    int *d_instancesCount = NULL;
+     
+    float neighborhoodDensityTime;
 
-    cudaMalloc((void **) &d_neighborhoodDensity,
-               sizeof(int) * distinctHypercubeCount);
+    if (APPROACH == 0) 
+    {   
+        puts("Using naive approach");
+        neighborhoodDensityTime = naiveStrategy(d_hypercubeArray, h_neighborhoodDensity, h_instancesCount, distinctHypercubeCount, BIN, DIM);
+        
+    } else 
+    {
+        if(TREE_SELECT == 1)
+        {
+            neighborhoodDensityTime = simpleTreeStrategy(h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
 
-    cudaMalloc((void **) &d_instancesCount, sizeof(int) * distinctHypercubeCount);
+        }else if(TREE_SELECT == 2)
+        {
+            neighborhoodDensityTime = localityOptimTreeStrategy(h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
 
-    cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
-               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
-
-    cudaMemcpy(d_instancesCount, h_instancesCount,
-               sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
-
-    cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop, buildTreeStart, buildTreeStop;
-    cudaEvent_t buildSuperOptimTreeStart, buildSuperOptimTreeStop;
-    cudaEvent_t buildOptimTreeStart, buildOptimTreeStop;
-    float neighborhoodDensityTime = 0, treeTime = 0, superOptimTreeTime = 0, optimTreeTime = 0;
-
-
-    if (MINSPLIT == 0) {
-        dimBlock.x = 256;
-        int SPLIT = BIN;
-        dimGrid.x = ceil((float) (distinctHypercubeCount * SPLIT) / (float) (dimBlock.x));
-
-        cudaEventCreate(&neighborhoodDensityStart);
-        cudaEventCreate(&neighborhoodDensityStop);
-        cudaEventRecord(neighborhoodDensityStart);
-
-        naiveNeighborhoodDensity<<<dimGrid, dimBlock>>>(d_neighborhoodDensity, d_instancesCount, DIM,
-                                                        distinctHypercubeCount, d_hypercubeArray, SPLIT);
-
-        cudaDeviceSynchronize();
-        cudaEventRecord(neighborhoodDensityStop);
-        cudaEventSynchronize(neighborhoodDensityStop);
-        cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
-
-    } else {
-
-        cudaMemcpy(h_hypercubeArray, d_hypercubeArray, sizeof(int) * totalElements,
-                   cudaMemcpyDeviceToHost);
-
-        // Build a linear tree
-
-        treeNode *h_linearTree = NULL;
-        int linearTreeCount = 0;
-        int curDim = 0;
-
-        int *h_childCount = (int *) calloc((DIM + 1), sizeof(int));
-        int *h_dimStart = (int *) calloc((DIM + 1), sizeof(int));
-
-        appendNode(&h_linearTree, 0, distinctHypercubeCount - 1, NONE, NONE,
-                   &linearTreeCount);
-
-        cudaEventCreate(&buildTreeStart);
-        cudaEventCreate(&buildTreeStop);
-
-        cudaEventRecord(buildTreeStart);
-
-        buildLinearTree(h_hypercubeArray, &h_linearTree, h_childCount, h_dimStart,
-                        &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT, DIM);
-
-        cudaDeviceSynchronize();
-
-        cudaEventRecord(buildTreeStop);
-        cudaEventSynchronize(buildTreeStop);
-
-        cudaEventElapsedTime(&treeTime, buildTreeStart, buildTreeStop);
-
-        printf("Tree Node Count: %d\n", linearTreeCount);
-
-        // Build optimized linear tree with better cache hits
-        // Build optimized linear tree here
-        // Allocate memory for optim tree
-
-        printf("Optim tree build start\n");
-
-        treeNode *h_optimizedLinearTree =
-                (treeNode *) malloc(sizeof(treeNode) * linearTreeCount);
-
-
-        int *h_dimNodes = (int *) malloc(sizeof(int) * h_childCount[0]);
-
-        cudaEventCreate(&buildOptimTreeStart);
-        cudaEventCreate(&buildOptimTreeStop);
-
-        cudaEventRecord(buildOptimTreeStart);
-
-        buildOptimizedLinearTree(h_linearTree, h_optimizedLinearTree, h_dimNodes);
-
-        cudaDeviceSynchronize();
-
-        cudaEventRecord(buildOptimTreeStop);
-        cudaEventSynchronize(buildOptimTreeStop);
-
-        cudaEventElapsedTime(&optimTreeTime, buildOptimTreeStart, buildOptimTreeStop);
-
-        puts("Optimized tree build done");
-
-        optimTreeNode *h_superOptimTree = (optimTreeNode *) malloc(sizeof(optimTreeNode) * linearTreeCount);
-
-        cudaEventCreate(&buildSuperOptimTreeStart);
-        cudaEventCreate(&buildSuperOptimTreeStop);
-
-        cudaEventRecord(buildSuperOptimTreeStart);
-
-        buildSuperOptimTree(h_optimizedLinearTree, h_superOptimTree);
-
-        cudaDeviceSynchronize();
-
-        cudaEventRecord(buildSuperOptimTreeStop);
-        cudaEventSynchronize(buildSuperOptimTreeStop);
-
-        cudaEventElapsedTime(&superOptimTreeTime, buildSuperOptimTreeStart, buildSuperOptimTreeStop);
-
-        puts("Super Optimized Tree build done!!");
-
-        // Count neighborhood density of hypercubes
-
-        h_dimStart[DIM] = h_childCount[DIM - 2] + h_dimStart[DIM - 1];
-
-        optimTreeNode *d_linearTree = NULL;
-        int *d_dimStart = NULL;
-        int *d_childCount = NULL;
-
-        //Adding new code below
-
-        int *d_dimNodes = NULL;
-
-        cudaMalloc((void **) &d_dimNodes, sizeof(int) * h_childCount[0]);
-
-        cudaMemcpy(d_dimNodes, h_dimNodes,
-                   sizeof(int) * h_childCount[0], cudaMemcpyHostToDevice);
-
-
-        // Check below line again
-
-        cudaMalloc((void **) &d_linearTree, sizeof(optimTreeNode) * linearTreeCount);
-
-        cudaMalloc((void **) &d_dimStart, sizeof(int) * (DIM + 1));
-
-        cudaMalloc((void **) &d_childCount, sizeof(int) * (DIM + 1));
-
-
-        cudaMemcpy(d_linearTree, h_superOptimTree, sizeof(optimTreeNode) * linearTreeCount,
-                   cudaMemcpyHostToDevice);
-
-
-        cudaMemcpy(d_dimStart, h_dimStart, sizeof(int) * (DIM + 1),
-                   cudaMemcpyHostToDevice);
-
-        cudaMemcpy(d_childCount, h_childCount, sizeof(int) * (DIM + 1),
-                   cudaMemcpyHostToDevice);
-
-
-        dimBlock.x = 256;
-        if (h_childCount[0] == 0) {
-            dimGrid.x = ceil((float) (distinctHypercubeCount) / (float) (dimBlock.x));
-        } else {
-            dimGrid.x = ceil((float) (distinctHypercubeCount * h_childCount[0]) / (float) (dimBlock.x));
+        }else
+        {
+            neighborhoodDensityTime = finalOptimTreeStrategy(h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
         }
-        printf("Grid - %d  , Block - %d\n", dimGrid.x, dimBlock.x);
-        printf("Starting to process %d hypercubes\n", distinctHypercubeCount);
-
-        // Record time here
-
-        cudaEventCreate(&neighborhoodDensityStart);
-        cudaEventCreate(&neighborhoodDensityStop);
-
-        cudaEventRecord(neighborhoodDensityStart);
-
-        optimNeighborhoodDensity<<<dimGrid, dimBlock>>>(
-                d_neighborhoodDensity, d_instancesCount, d_linearTree, d_hypercubeArray,
-                d_childCount, DIM, distinctHypercubeCount, d_dimNodes);
-
-        cudaDeviceSynchronize();
-
-        cudaEventRecord(neighborhoodDensityStop);
-        cudaEventSynchronize(neighborhoodDensityStop);
-
-        cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart, neighborhoodDensityStop);
-
+       
     }
-
-    cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
-               sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
 
     int maxNeighborhoodDensity = INT_MIN;
 
-    for (int i = 0; i < distinctHypercubeCount; i++) {
+    for (int i = 0; i < distinctHypercubeCount; i++) 
+    {   
+        
         if (i < 50)
         printf("Index - %d - %d\n",i,h_neighborhoodDensity[i]);
+        
         if (h_neighborhoodDensity[i] > maxNeighborhoodDensity) {
             maxNeighborhoodDensity = h_neighborhoodDensity[i];
         }
     }
 
-    
-    // Calculate Outlier Score
-
+    // Calculate Outlier Score 
     float *h_outlierScore =
             (float *) malloc(sizeof(float) * N);
 
@@ -422,8 +256,6 @@ int main(int argc, char **argv)
             h_outlierScore, h_neighborhoodDensity, h_hypercube_mapper, N,
             maxNeighborhoodDensity);
     clock_t end = clock();
-    
-   
     
     cudaDeviceSynchronize();
     cudaEventRecord(totalTimeStop);
@@ -437,14 +269,6 @@ int main(int argc, char **argv)
     printf("Total time for execution is %f sec \n", (totalTime / 1000));
 
     printf("Total time for building hypercube is %f sec \n", (buildHypercubeArrayTime / 1000));
-
-    //printf("Total time to sort is %f sec \n",(sortTime/1000));
-
-    printf("Time for building linear Tree is %f sec \n", (treeTime / 1000));
-
-    printf("Time for building optimized linear Tree is %f sec \n", (optimTreeTime / 1000));
-
-    printf("Time for building super optimized linear Tree is %f sec \n", (superOptimTreeTime / 1000));
 
     printf("Time for neighborhood density is %f sec \n", (neighborhoodDensityTime / (1000)));
 
