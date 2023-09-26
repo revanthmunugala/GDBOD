@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
   float neighborhoodDensityTime;
 
   if (APPROACH == 0) {
-    puts("Using naive approach");
+
     neighborhoodDensityTime =
         naiveStrategy(d_hypercubeArray, h_neighborhoodDensity, h_instancesCount,
                       distinctHypercubeCount, BIN, DIM);
