@@ -4,12 +4,12 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
+// #include <math.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <unistd.h>
 #include <iostream>
 #include <string.h>
-#include <unistd.h>
 #include <map>
 #include <vector>
 
@@ -17,6 +17,7 @@ using namespace std;
 
 #define NONE -1
 #define MY_DATATYPE unsigned int
+
 const string approach[] = {"Naive", "Tree"};
 const string treeSelect[] = {"Simple", "Locality optimized", "Locality and traversal optimized"};
 
@@ -68,7 +69,7 @@ __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
 __device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB, int hypercubeCount, int DIM);
 
 __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree, int hypercubeIndex,
-                                      int *childCount, int *dimStart, int *instancesCount,
+                                      int *childCount, int *instancesCount,
                                       int parentIndex, int curDim, int N, int DIM);
 
 __global__ void neighborhoodDensity(int *density, int *instancesCount,
@@ -106,5 +107,18 @@ __host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensit
 __host__ int findK(int BIN);
 
 __host__ __device__ int setBitsTo1(int k);
+
+__global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
+                                    treeNode *linearTree, int *dimStart,
+                                    int *hypercubeArray, int *childCount, int DIM,
+                                    int hypercubeCount);
+
+__host__ float simpleTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
+
+__host__ float localityOptimTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
+
+__host__ float finalOptimTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
+
+__host__ float naiveStrategy(int*d_hypercubeArray, int*h_neighborhoodDensity, int* h_instancesCount, int distinctHypercubeCount,int BIN, int DIM);
 
 #endif
