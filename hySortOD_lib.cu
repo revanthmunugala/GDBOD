@@ -1,5 +1,6 @@
 #include "hySortOD_lib.h"
 
+// Import dataset
 __host__ int importDataset(char *fname, int N, double *dataset, int DIM) {
 
   FILE *fp = fopen(fname, "r");
@@ -37,6 +38,7 @@ __host__ int importDataset(char *fname, int N, double *dataset, int DIM) {
   return 0;
 }
 
+// Normalize dataset
 __host__ void normalizeDataset(double *dataset, int N, int DIM) {
   double minValue[DIM];
   double maxValue[DIM];
@@ -70,6 +72,7 @@ __host__ void normalizeDataset(double *dataset, int N, int DIM) {
   return;
 }
 
+// Encode current hypercube coordinates
 __device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
                                 int DIM, int index, int encodeBlockSize,
                                 int k) {
@@ -86,6 +89,7 @@ __device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
   return;
 }
 
+// Map points to hypercube and encode
 __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
                                 int DIM, int BIN, int encodeBlockSize, int k) {
   int totalElements = N * DIM;
@@ -96,6 +100,7 @@ __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
 
   extern __shared__ int tempHypercube[];
 
+  // Map points to hypercube and store them in a temp array
   if (threadId < totalElements && threadIdx.x < totalElementsPerBlock * DIM) {
     tempHypercube[threadIdx.x] = (int)floor(dataset[threadId] / length);
   }
@@ -104,6 +109,7 @@ __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
 
   int hypercubeIndex = (threadIdx.x / DIM) + blockIdx.x * totalElementsPerBlock;
 
+  // encode hypercubes
   if ((threadIdx.x % DIM == 0) && hypercubeIndex < N &&
       hypercubeIndex < (blockIdx.x + 1) * totalElementsPerBlock) {
     encodeHypercube(hypercube, tempHypercube + threadIdx.x, DIM, hypercubeIndex,
@@ -113,8 +119,10 @@ __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
   return;
 }
 
+// Return number with k bits set to 1
 __host__ __device__ int setBitsTo1(int k) { return pow(2, k) - 1; }
 
+// Decode encoded hypercube into hypercube array
 __device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
                                 int *hypercube, int DIM, int hypercubeCount,
                                 int threadId, int encodeBlockSize, int k) {
@@ -129,6 +137,7 @@ __device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
     iterationCount = elementsPerBlock;
   }
 
+  // Start from the last index
   for (int i = (DIM - 1); i >= 0; i--) {
 
     if (hypercubeEncodedArray[lastIndex] == 0 && iterationCount == 0) {
@@ -138,13 +147,16 @@ __device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
 
     iterationCount--;
 
+    // Get the last k bits
     hypercube[threadId * DIM + i] = hypercubeEncodedArray[lastIndex] & kBitsTo1;
+    // Right shift by k bits
     hypercubeEncodedArray[lastIndex] = hypercubeEncodedArray[lastIndex] >> k;
   }
 
   return;
 }
 
+// Decode encoded hypercube and build hypercube array
 __global__ void buildHypercubeArray(MY_DATATYPE *hypercube, int *hypercubeArray,
                                     int hypercubeCount, int DIM,
                                     int encodeBlockSize, int k) {
@@ -157,6 +169,7 @@ __global__ void buildHypercubeArray(MY_DATATYPE *hypercube, int *hypercubeArray,
   return;
 }
 
+// Supporting function to add node to a tree
 __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
                          int coordinate, int parentIndex, int *curCount) {
 
@@ -168,6 +181,7 @@ __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
   curNode->nextChildIndex = NONE;
   curNode->nextSiblingIndex = NONE;
 
+  // Allocate memory for one nod
   if ((*curCount) == 0) {
     (*rootNode) = (treeNode *)malloc(sizeof(treeNode) * ((*curCount) + 1));
   } else {
@@ -180,6 +194,7 @@ __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
   return;
 }
 
+// Build simple tree
 __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
                               int *childCount, int *dimStart, int *curCount,
                               int curDim, int N, int MINSPLIT, int DIM) {
@@ -189,30 +204,37 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
 
   int curDimElementCount;
 
+  // Keep track of the nodes in current dimension
   if (curDim - 1 >= 0) {
     curDimElementCount = childCount[curDim - 1];
   } else {
     curDimElementCount = 1;
   }
 
+  // Find current dimension starting and ending indexes
   int dimensionStart = dimStart[curDim];
   int dimensionEnd = curDimElementCount + dimensionStart;
 
+  // Iterate from dim start to dim end
   for (int i = dimensionStart; i < dimensionEnd; i++) {
 
     if (curDim + 1 < DIM) {
       dimStart[curDim + 1] = i + 1;
     }
 
+    // Find the starting and ending coordinates of curren node
     int startIndex = (*linearTree)[i].startIndex;
     int endIndex = (*linearTree)[i].endIndex;
 
+    // Skip if it doesn't meet the threshold
     if (endIndex - startIndex < MINSPLIT) {
       continue;
     }
 
     int curValue = hypercube[startIndex * DIM + curDim];
     int curChildCount = 0;
+
+    // Append nodes by mapping further
     for (int j = startIndex; j <= endIndex; j++) {
 
       if (hypercube[j * DIM + curDim] > curValue) {
@@ -231,6 +253,7 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
         curValue = hypercube[j * DIM + curDim];
       }
 
+      // Edge case
       if (j == endIndex) {
         if (curChildCount > 0) {
           (*linearTree)[*curCount - 1].nextSiblingIndex = *curCount;
@@ -245,11 +268,14 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
     }
   }
 
+  // Append nodes in the next dimension
   buildLinearTree(hypercube, linearTree, childCount, dimStart, curCount,
                   curDim + 1, N, MINSPLIT, DIM);
   return;
 }
 
+// Supporting function to check if the difference between current coordinates is
+// less than 1
 __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                              int curIndex) {
   int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
@@ -259,6 +285,7 @@ __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
   return 0;
 }
 
+// Supporting function to check if current hypercube is an immediate neighbor
 __device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
                                       int hypercubeCount, int DIM) {
 
@@ -270,6 +297,7 @@ __device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
   return 1;
 }
 
+// Neighborhood density of subtree - locality optimixzed
 __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
                                       int hypercubeIndex, int *childCount,
                                       int *instancesCount, int parentIndex,
@@ -278,16 +306,21 @@ __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
   int curDensity = 0;
   int curHypercubeIndex = parentIndex;
   int index;
+  // Set end index as the sibling index of starting index
   int endIndex = linearTree[curHypercubeIndex].nextSiblingIndex;
 
+  // Traverse from current index to end index
   while (curHypercubeIndex != NONE && curHypercubeIndex != endIndex) {
 
     index = hypercubeIndex * DIM + (curDim - 1);
 
+    // Check if the current node is a leaf node
     if (linearTree[curHypercubeIndex].nextChildIndex == NONE) {
+      // Iterate through all the hypercubes in the current node
       for (int i = linearTree[curHypercubeIndex].startIndex;
            i <= linearTree[curHypercubeIndex].endIndex; i++) {
 
+        // Check if current hypercube is an immediate neighbor
         if (checkImmediateNeighbor(hypercube + hypercubeIndex * DIM,
                                    hypercube + i * DIM, N, DIM)) {
           curDensity += instancesCount[i];
@@ -295,6 +328,7 @@ __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
       }
     }
 
+    // Move to child node if present and satisfies the condition for neighbor
     if ((linearTree[curHypercubeIndex].nextChildIndex != NONE &&
          checkNeighbor(index, hypercube, linearTree, curHypercubeIndex))) {
 
@@ -320,9 +354,13 @@ __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
         }
       }
 
-    } else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
+    }
+    // Move to sibling node if present
+    else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
       curHypercubeIndex = linearTree[curHypercubeIndex].nextSiblingIndex;
-    } else {
+    }
+    // backtrack to parent node until the current node has a sibling
+    else {
       while (curHypercubeIndex != NONE) {
         curHypercubeIndex = linearTree[curHypercubeIndex].parentIndex;
         curDim--;
@@ -339,19 +377,24 @@ __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
   return curDensity;
 }
 
+// Calculate neighborhood density using locality optimized tree
 __global__ void neighborhoodDensity(int *density, int *instancesCount,
                                     treeNode *linearTree, int *hypercubeArray,
                                     int *childCount, int DIM,
                                     int hypercubeCount, int *dimNodes) {
 
+  // Set thread indexes
   int threadId = threadIdx.x + blockIdx.x * blockDim.x;
   int initialDimNodeCount = childCount[0];
   int totalNodes = hypercubeCount * initialDimNodeCount;
-
+  // If  root node has no children
+  // If  root node has no children
   if (initialDimNodeCount == 0) {
+    // Assign one thread per distinct hypercube
     if (threadId < hypercubeCount) {
       int hypercubeIndex = threadId;
       int parentIndex = 0;
+      // Calculate neighborhood density
       int curThreadDensity = neighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, childCount,
           instancesCount, parentIndex, 1, hypercubeCount, DIM);
@@ -360,14 +403,18 @@ __global__ void neighborhoodDensity(int *density, int *instancesCount,
     }
 
   } else {
+    // Parallelize tree traversal further if root node has children
     if (threadId < totalNodes) {
       int hypercubeIndex = threadId / initialDimNodeCount;
+      // Map multiple threads to children nodes of root
       int parentIndex = dimNodes[threadId % initialDimNodeCount];
 
+      // Calculate neighborhood density by traversing a sub section of tree
       int curThreadDensity = neighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, childCount,
           instancesCount, parentIndex, 1, hypercubeCount, DIM);
 
+      // use atomic addition to update neighborhood density of one hypercube
       atomicAdd(density + hypercubeIndex, curThreadDensity);
     }
   }
@@ -375,19 +422,24 @@ __global__ void neighborhoodDensity(int *density, int *instancesCount,
   return;
 }
 
+// Calculate neighborhood density using simple tree
 __global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
                                           treeNode *linearTree,
                                           int *hypercubeArray, int *childCount,
                                           int DIM, int hypercubeCount) {
 
+  // Set thread indexes
   int threadId = threadIdx.x + blockIdx.x * blockDim.x;
   int initialDimNodeCount = childCount[0];
   int totalNodes = hypercubeCount * initialDimNodeCount;
 
+  // If  root node has no children
   if (initialDimNodeCount == 0) {
+    // Assign one thread per distinct hypercube
     if (threadId < hypercubeCount) {
       int hypercubeIndex = threadId;
       int parentIndex = 0;
+      // Calculate neighborhood density
       int curThreadDensity = neighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, childCount,
           instancesCount, parentIndex, 1, hypercubeCount, DIM);
@@ -396,14 +448,17 @@ __global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
     }
 
   } else {
+    // Parallelize tree traversal further if root node has children
     if (threadId < totalNodes) {
       int hypercubeIndex = threadId / initialDimNodeCount;
+      // Map multiple threads to children nodes of root
       int parentIndex = (threadId % initialDimNodeCount) + 1;
 
+      // Calculate neighborhood density by traversing a sub section of tree
       int curThreadDensity = neighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, childCount,
           instancesCount, parentIndex, 1, hypercubeCount, DIM);
-
+      // use atomic addition to update neighborhood density of one hypercube
       atomicAdd(density + hypercubeIndex, curThreadDensity);
     }
   }
@@ -411,8 +466,9 @@ __global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
   return;
 }
 
-void copyContents(treeNode *linearCurNode, treeNode *optimCurNode,
-                  int parentIndex, int siblingIndex, int childIndex) {
+// Supporting function to copy node contents
+__host__ void copyContents(treeNode *linearCurNode, treeNode *optimCurNode,
+                           int parentIndex, int siblingIndex, int childIndex) {
   (*optimCurNode).startIndex = (*linearCurNode).startIndex;
   (*optimCurNode).endIndex = (*linearCurNode).endIndex;
   (*optimCurNode).coordinate = (*linearCurNode).coordinate;
@@ -422,38 +478,47 @@ void copyContents(treeNode *linearCurNode, treeNode *optimCurNode,
   return;
 }
 
+// build locality optimized tree
 void buildOptimizedLinearTree(treeNode *linearTree,
                               treeNode *optimizedLinearTree, int *dimNodes) {
   int curHypercubeIndex = 1;
   int optimTreeCount = 0;
 
+  // Check if root node has children
   if (linearTree[0].nextChildIndex == NONE) {
     copyContents(linearTree, optimizedLinearTree, NONE, NONE, NONE);
     optimTreeCount++;
     return;
   }
 
+  // Copy root node and first child of root node
   copyContents(linearTree, optimizedLinearTree, NONE, NONE, 1);
   optimTreeCount++;
   copyContents(linearTree + 1, optimizedLinearTree + 1, 0, NONE, NONE);
   optimTreeCount++;
+
+  // Supporting variable declaration
   int backTrackIndex = 1;
   int flag = 0;
   int curDim = 1;
   int count = 0;
 
+  // Traverse until current index is NULL
   while (curHypercubeIndex != NONE) {
 
+    // Keep track of node positions in first dimension
     if (curDim == 1) {
       dimNodes[count] = optimTreeCount - 1;
       count++;
     }
 
+    // Move to child node if present
     if (linearTree[curHypercubeIndex].nextChildIndex != NONE) {
 
       curHypercubeIndex = linearTree[curHypercubeIndex].nextChildIndex;
       curDim++;
 
+      // Copy contents and update mapping
       if (flag == 1) {
         optimizedLinearTree[backTrackIndex].nextChildIndex = optimTreeCount;
         copyContents(linearTree + curHypercubeIndex,
@@ -471,8 +536,11 @@ void buildOptimizedLinearTree(treeNode *linearTree,
       optimTreeCount++;
       flag = 0;
 
-    } else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
+    }
+    // Move to sibling index if there is no child node
+    else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
 
+      // Copy contents and update mapping
       optimizedLinearTree[backTrackIndex].nextSiblingIndex = optimTreeCount;
       curHypercubeIndex = linearTree[curHypercubeIndex].nextSiblingIndex;
 
@@ -482,7 +550,9 @@ void buildOptimizedLinearTree(treeNode *linearTree,
       copyContents(linearTree + curHypercubeIndex,
                    optimizedLinearTree + optimTreeCount, temp, NONE, NONE);
       optimTreeCount++;
-    } else {
+    }
+    // backtrack to parent node until the current node has a sibling
+    else {
 
       while (curHypercubeIndex != NONE) {
         curHypercubeIndex = linearTree[curHypercubeIndex].parentIndex;
@@ -492,13 +562,13 @@ void buildOptimizedLinearTree(treeNode *linearTree,
         if (curHypercubeIndex != NONE &&
             linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
           flag = 1;
+          // Copy contents and update mapping
           curHypercubeIndex = linearTree[curHypercubeIndex].nextSiblingIndex;
           int temp = optimizedLinearTree[backTrackIndex].parentIndex;
 
           optimizedLinearTree[backTrackIndex].nextSiblingIndex = optimTreeCount;
 
           backTrackIndex = optimTreeCount;
-
           copyContents(linearTree + curHypercubeIndex,
                        optimizedLinearTree + optimTreeCount, temp, NONE, NONE);
           optimTreeCount++;
@@ -511,6 +581,7 @@ void buildOptimizedLinearTree(treeNode *linearTree,
   return;
 }
 
+// Supporting function
 __device__ int optimCheckNeighbor(int index, int *hypercube,
                                   optimTreeNode *linearTree, int curIndex) {
   int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
@@ -520,6 +591,7 @@ __device__ int optimCheckNeighbor(int index, int *hypercube,
   return 0;
 }
 
+// Calculate neighborhood density of sub tree
 __device__ int optimNeighborDensitySubTree(int *hypercube,
                                            optimTreeNode *linearTree,
                                            int hypercubeIndex,
@@ -530,13 +602,16 @@ __device__ int optimNeighborDensitySubTree(int *hypercube,
   int curHypercubeIndex = parentIndex;
   int endIndex = linearTree[parentIndex].nextBreakIndex;
 
+  // traverse from starting index till ending index
   while (curHypercubeIndex != NONE && curHypercubeIndex != endIndex) {
     index = hypercubeIndex * DIM + (linearTree[curHypercubeIndex].curDim - 1);
 
+    // Check if current node is a leaf node
     if (linearTree[curHypercubeIndex].nextChildIndex == NONE) {
       for (int i = linearTree[curHypercubeIndex].startIndex;
            i <= linearTree[curHypercubeIndex].endIndex; i++) {
 
+        // Check if current node is an immediate neighbor
         if (checkImmediateNeighbor(hypercube + hypercubeIndex * DIM,
                                    hypercube + i * DIM, N, DIM)) {
           curDensity += instancesCount[i];
@@ -544,57 +619,74 @@ __device__ int optimNeighborDensitySubTree(int *hypercube,
       }
     }
 
+    // Move to chid node if present
     if (linearTree[curHypercubeIndex].nextChildIndex != NONE &&
         optimCheckNeighbor(index, hypercube, linearTree, curHypercubeIndex)) {
       curHypercubeIndex = linearTree[curHypercubeIndex].nextChildIndex;
-    } else {
+    }
+    // Move to node pointed by break index if there is no child node
+    else {
       curHypercubeIndex = linearTree[curHypercubeIndex].nextBreakIndex;
     }
   }
 
+  // Return current density of sub tree
   return curDensity;
 }
 
+// Calculate neighborhood density using naive apprach
 __global__ void naiveNeighborhoodDensity(int *density, int *instancesCount,
                                          int DIM, int hypercubeCount,
                                          int *hypercube, int SPLIT) {
+  // Set thread indexes
   int threadId = threadIdx.x + blockIdx.x * blockDim.x;
   int totalThreads = hypercubeCount * SPLIT;
 
+  // Assign multiple threads to traverse hypercube array
   if (threadId < totalThreads) {
     int hypercubeIndex = threadId / SPLIT;
     int curThreadDensity = 0;
+
+    // Find starting and ending indexes for each thread
     int startIndex = (threadId % SPLIT) * (hypercubeCount / SPLIT);
     int endIndex = startIndex + (hypercubeCount / SPLIT);
     if ((threadId % SPLIT) == SPLIT - 1) {
       endIndex += (hypercubeCount % SPLIT);
     }
 
+    // Do a linear scan and calculate neighborhood density
     for (int i = startIndex; i < endIndex; i++) {
       if (checkImmediateNeighbor(hypercube + hypercubeIndex * DIM,
                                  hypercube + i * DIM, hypercubeCount, DIM)) {
         curThreadDensity += instancesCount[i];
       }
     }
+
+    // use atomic addition to update neighborhood density of one hypercube
     atomicAdd(density + hypercubeIndex, curThreadDensity);
   }
   return;
 }
 
+// Calculate neighborhood density using fast tree
 __global__ void optimNeighborhoodDensity(int *density, int *instancesCount,
                                          optimTreeNode *linearTree,
                                          int *hypercubeArray, int *childCount,
                                          int DIM, int hypercubeCount,
                                          int *dimNodes) {
 
+  // Set thread indexes
   int threadId = threadIdx.x + blockIdx.x * blockDim.x;
   int initialDimNodeCount = childCount[0];
   int totalNodes = hypercubeCount * initialDimNodeCount;
 
+  // If  root node has no children
   if (initialDimNodeCount == 0) {
+    // Assign one thread per distinct hypercube
     if (threadId < hypercubeCount) {
       int hypercubeIndex = threadId;
       int parentIndex = 0;
+      // Calculate neighborhood density
       int curThreadDensity = optimNeighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, instancesCount,
           parentIndex, hypercubeCount, DIM);
@@ -603,14 +695,18 @@ __global__ void optimNeighborhoodDensity(int *density, int *instancesCount,
     }
 
   } else {
+    // Parallelize tree traversal further if root node has children
     if (threadId < totalNodes) {
       int hypercubeIndex = threadId / initialDimNodeCount;
+      // Map multiple threads to children nodes of root
       int parentIndex = dimNodes[threadId % initialDimNodeCount];
 
+      // Calculate neighborhood density by traversing a sub section of tree
       int curThreadDensity = optimNeighborDensitySubTree(
           hypercubeArray, linearTree, hypercubeIndex, instancesCount,
           parentIndex, hypercubeCount, DIM);
 
+      // use atomic addition to update neighborhood density of one hypercube
       atomicAdd(density + hypercubeIndex, curThreadDensity);
     }
   }
@@ -618,26 +714,33 @@ __global__ void optimNeighborhoodDensity(int *density, int *instancesCount,
   return;
 }
 
+// Supporting function to copy node data from locality optim tree to fast tree
 __host__ void copyNode(optimTreeNode *root, treeNode *linearCurNode,
                        optimTreeNode *optimCurNode, int curDim) {
+  // Copy node contents
   (*optimCurNode).startIndex = (*linearCurNode).startIndex;
   (*optimCurNode).endIndex = (*linearCurNode).endIndex;
   (*optimCurNode).coordinate = (*linearCurNode).coordinate;
   (*optimCurNode).nextChildIndex = (*linearCurNode).nextChildIndex;
   (*optimCurNode).curDim = curDim;
 
+  // If current node has sibling, then set break to sibling
   if ((*linearCurNode).nextSiblingIndex != NONE) {
     (*optimCurNode).nextBreakIndex = (*linearCurNode).nextSiblingIndex;
-  } else {
+  }
+  // If not, then set break to parent node's break index
+  else {
     (*optimCurNode).nextBreakIndex =
         root[(*linearCurNode).parentIndex].nextBreakIndex;
   }
+
   return;
 }
 
+// Build tree with optimized locality and traversal
 __host__ void buildSuperOptimTree(treeNode *linearTree,
                                   optimTreeNode *superOptimTree) {
-
+  // Set initial node
   (*superOptimTree).coordinate = (*linearTree).coordinate;
   (*superOptimTree).startIndex = (*linearTree).startIndex;
   (*superOptimTree).endIndex = (*linearTree).endIndex;
@@ -652,17 +755,23 @@ __host__ void buildSuperOptimTree(treeNode *linearTree,
   int curDim = 1;
   int curHypercubeIndex = 1;
 
+  // iterate untill current index is none
   while (curHypercubeIndex != NONE) {
 
     copyNode(superOptimTree, linearTree + curHypercubeIndex,
              superOptimTree + curHypercubeIndex, curDim);
 
+    // Move to child node if present
     if (linearTree[curHypercubeIndex].nextChildIndex != NONE) {
       curHypercubeIndex = linearTree[curHypercubeIndex].nextChildIndex;
       curDim++;
-    } else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
+    }
+    // Move to sibling node is child node is not present
+    else if (linearTree[curHypercubeIndex].nextSiblingIndex != NONE) {
       curHypercubeIndex = linearTree[curHypercubeIndex].nextSiblingIndex;
-    } else {
+    }
+    // Backtrack until current node has a sibling node
+    else {
       while (curHypercubeIndex != NONE) {
         curHypercubeIndex = linearTree[curHypercubeIndex].parentIndex;
         curDim--;
@@ -679,13 +788,16 @@ __host__ void buildSuperOptimTree(treeNode *linearTree,
   return;
 }
 
+// Function to calculate outlier score
 void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
                            map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
                            int N, int maxNeighborhoodDensity) {
 
+  // Map iterator
   map<vector<MY_DATATYPE>, vector<int>>::iterator itr;
-
   int index = 0;
+
+  // Calculate neighborhodd density
   for (itr = hypercubeMap.begin(); itr != hypercubeMap.end(); itr++) {
     for (int i : itr->second) {
       outlierScore[i] =
@@ -698,9 +810,9 @@ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
   return;
 }
 
-int findK(int BIN) {
+// Function to find min bits required to store hypercube dim
+__host__ int findK(int BIN) {
   int k = 1;
-
   while (pow(2, k) < BIN) {
     k++;
   }
@@ -708,40 +820,54 @@ int findK(int BIN) {
   return k;
 }
 
+// Naive approach
 float naiveStrategy(int *d_hypercubeArray, int *h_neighborhoodDensity,
                     int *h_instancesCount, int distinctHypercubeCount, int BIN,
                     int DIM) {
 
+  puts("using naive approach");
+
+  // Variable declaration
   cudaEvent_t neighborhoodDensityStart, neighborhoodDensityStop;
-  float neighborhoodDensityTime;
 
   int *d_neighborhoodDensity = NULL;
-
-  cudaMalloc((void **)&d_neighborhoodDensity,
-             sizeof(int) * distinctHypercubeCount);
-
-  cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
-             sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
-
   int *d_instancesCount = NULL;
 
-  cudaMalloc((void **)&d_instancesCount, sizeof(int) * distinctHypercubeCount);
+  int SPLIT = BIN;
+  float neighborhoodDensityTime;
 
-  cudaMemcpy(d_instancesCount, h_instancesCount,
-             sizeof(int) * distinctHypercubeCount, cudaMemcpyHostToDevice);
-
-  // Use naive approach when approach is 0 or when MINSPLIT = 0
   dim3 dimBlock, dimGrid;
 
+  // Memory
+  size_t neighborhoodDensityMemory = sizeof(int) * distinctHypercubeCount;
+  size_t instancesCountMemory = sizeof(int) * distinctHypercubeCount;
+
+  // Allocate memory in device for neighborhood density and copy from host to
+  // device
+  cudaMalloc((void **)&d_neighborhoodDensity, neighborhoodDensityMemory);
+
+  cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
+             neighborhoodDensityMemory, cudaMemcpyHostToDevice);
+
+  // Allocate memory in device for instances count and copy from host to
+  // device
+  cudaMalloc((void **)&d_instancesCount, instancesCountMemory);
+
+  cudaMemcpy(d_instancesCount, h_instancesCount, instancesCountMemory,
+             cudaMemcpyHostToDevice);
+
+  // Set threads per block for kernel function
   dimBlock.x = 256;
-  int SPLIT = BIN;
+
   dimGrid.x =
       ceil((float)(distinctHypercubeCount * SPLIT) / (float)(dimBlock.x));
 
+  // Get timings for neighborhood density
   cudaEventCreate(&neighborhoodDensityStart);
   cudaEventCreate(&neighborhoodDensityStop);
   cudaEventRecord(neighborhoodDensityStart);
 
+  // Calculate neighborhood density using naive approach
   naiveNeighborhoodDensity<<<dimGrid, dimBlock>>>(
       d_neighborhoodDensity, d_instancesCount, DIM, distinctHypercubeCount,
       d_hypercubeArray, SPLIT);
@@ -749,12 +875,15 @@ float naiveStrategy(int *d_hypercubeArray, int *h_neighborhoodDensity,
   cudaDeviceSynchronize();
   cudaEventRecord(neighborhoodDensityStop);
   cudaEventSynchronize(neighborhoodDensityStop);
+
   cudaEventElapsedTime(&neighborhoodDensityTime, neighborhoodDensityStart,
                        neighborhoodDensityStop);
 
+  // Copy calculated neighborhood density from device to host
   cudaMemcpy(h_neighborhoodDensity, d_neighborhoodDensity,
              sizeof(int) * distinctHypercubeCount, cudaMemcpyDeviceToHost);
 
+  // Return the time for calculating neighborhood density
   return neighborhoodDensityTime;
 }
 
@@ -799,7 +928,7 @@ finalOptimTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
   cudaMemcpy(d_neighborhoodDensity, h_neighborhoodDensity,
              neighborhoodDensityMemory, cudaMemcpyHostToDevice);
 
-  // Allocate memory in device for instances Count and copy from host to device
+  // Allocate memory in device for instances count and copy from host to device
   cudaMalloc((void **)&d_instancesCount, instancesCountMemory);
 
   cudaMemcpy(d_instancesCount, h_instancesCount, instancesCountMemory,

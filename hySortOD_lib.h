@@ -4,13 +4,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-// #include <math.h>
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <unistd.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <iostream>
-#include <string.h>
 #include <map>
+#include <string.h>
 #include <vector>
 
 using namespace std;
@@ -19,106 +19,161 @@ using namespace std;
 #define MY_DATATYPE unsigned int
 
 const string approach[] = {"Naive", "Tree"};
-const string treeSelect[] = {"Simple", "Locality optimized", "Locality and traversal optimized"};
+const string treeSelect[] = {"Simple", "Locality optimized",
+                             "Locality and traversal optimized"};
 
 typedef struct treeNode {
-    int coordinate;
-    int startIndex;
-    int endIndex;
-    int nextSiblingIndex;
-    int nextChildIndex;
-    int parentIndex;
+  int coordinate;
+  int startIndex;
+  int endIndex;
+  int nextSiblingIndex;
+  int nextChildIndex;
+  int parentIndex;
 } treeNode;
 
 typedef struct optimTreeNode {
-    int coordinate;
-    int startIndex;
-    int endIndex;
-    int nextChildIndex;
-    int nextBreakIndex;
-    int curDim;
+  int coordinate;
+  int startIndex;
+  int endIndex;
+  int nextChildIndex;
+  int nextBreakIndex;
+  int curDim;
 } optimTreeNode;
 
+#include "hySortOD_lib.h"
+
+// Import dataset
 __host__ int importDataset(char *fname, int N, double *dataset, int DIM);
 
+// Normalize dataset
 __host__ void normalizeDataset(double *dataset, int N, int DIM);
 
-__device__ void encodeHypercube(MY_DATATYPE*curHypercube, int *hypercube, int DIM, int index,
-                                int encodeBlockSize, int k);
+// Encode hypercube coordinates
+__device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
+                                int DIM, int index, int encodeBlockSize,
+                                int k);
 
-__global__ void createHypercube(MY_DATATYPE*hypercube, double *dataset, int N, int DIM,
-                                int BIN, int encodeBlockSize, int k);
-                                
+// Map points to hypercube and encode
+__global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
+                                int DIM, int BIN, int encodeBlockSize, int k);
+// Return number with k bits set to 1
+__host__ __device__ int setBitsTo1(int k);
 
-__device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray, int *hypercube, int DIM,
-                                int hypercubeCount, int threadId, int encodeBlockSize, int k);
+// Decode encoded hypercube into hypercube array
+__device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
+                                int *hypercube, int DIM, int hypercubeCount,
+                                int threadId, int encodeBlockSize, int k);
 
+// Decode encoded hypercube and build hypercube array
 __global__ void buildHypercubeArray(MY_DATATYPE *hypercube, int *hypercubeArray,
-                                    int hypercubeCount, int DIM, int encodeBlockSize, int k);
+                                    int hypercubeCount, int DIM,
+                                    int encodeBlockSize, int k);
 
+// Supporting function to add node to a tree
 __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
                          int coordinate, int parentIndex, int *curCount);
 
+// Build simple tree
 __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
                               int *childCount, int *dimStart, int *curCount,
-                              int curDim, int N, int MINSPLIT, int DIM);
+                              int curDim, int N, int MINSPLIT, int DIM); 
 
+
+// Supporting function to check if the difference between current coordinates is
+// less than 1
 __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                              int curIndex);
 
-__device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB, int hypercubeCount, int DIM);
+// Supporting function to check if current hypercube is an immediate neighbor
+__device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
+                                      int hypercubeCount, int DIM);
 
-__device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree, int hypercubeIndex,
-                                      int *childCount, int *instancesCount,
-                                      int parentIndex, int curDim, int N, int DIM);
+// Neighborhood density of subtree - locality optimixzed
+__device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
+                                      int hypercubeIndex, int *childCount,
+                                      int *instancesCount, int parentIndex,
+                                      int curDim, int N, int DIM);
 
+// Calculate neighborhood density using locality optimized tree
 __global__ void neighborhoodDensity(int *density, int *instancesCount,
-                                    treeNode *linearTree, int *dimStart,
-                                    int *hypercubeArray, int *childCount, int DIM,
+                                    treeNode *linearTree, int *hypercubeArray,
+                                    int *childCount, int DIM,
                                     int hypercubeCount, int *dimNodes);
 
-__host__ void copyContents(treeNode *linearCurNode, treeNode *optimCurNode,
-                  int parentIndex, int siblingIndex, int childIndex);
+// Calculate neighborhood density using simple tree
+__global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
+                                          treeNode *linearTree,
+                                          int *hypercubeArray, int *childCount,
+                                          int DIM, int hypercubeCount);
 
-__host__ void buildOptimizedLinearTree(treeNode *linearTree,
+// Supporting function to copy node contents
+__host__ void copyContents(treeNode *linearCurNode, treeNode *optimCurNode,
+                           int parentIndex, int siblingIndex, int childIndex);
+
+// build locality optimized tree
+void buildOptimizedLinearTree(treeNode *linearTree,
                               treeNode *optimizedLinearTree, int *dimNodes);
 
-__device__ int optimCheckNeighbor(int index, int *hypercube, optimTreeNode *linearTree,
-                                  int curIndex);
+// Supporting function
+__device__ int optimCheckNeighbor(int index, int *hypercube,
+                                  optimTreeNode *linearTree, int curIndex);
 
-__device__ int optimNeighborDensitySubTree(int *hypercube, optimTreeNode *linearTree, int hypercubeIndex,
-                                           int *instancesCount, int parentIndex, int N, int DIM);
+// Calculate neighborhood density of sub tree
+__device__ int optimNeighborDensitySubTree(int *hypercube,
+                                           optimTreeNode *linearTree,
+                                           int hypercubeIndex,
+                                           int *instancesCount, int parentIndex,
+                                           int N, int DIM);
 
-__global__ void naiveNeighborhoodDensity(int *density, int *instancesCount, int DIM,
-                                         int hypercubeCount, int *hypercube, int SPLIT);
+// Calculate neighborhood density using naive apprach
+__global__ void naiveNeighborhoodDensity(int *density, int *instancesCount,
+                                         int DIM, int hypercubeCount,
+                                         int *hypercube, int SPLIT);
 
+// Calculate neighborhood density using fast tree
 __global__ void optimNeighborhoodDensity(int *density, int *instancesCount,
-                                         optimTreeNode *linearTree, int *hypercubeArray,
-                                         int *childCount, int DIM,
-                                         int hypercubeCount, int *dimNodes) ;
+                                         optimTreeNode *linearTree,
+                                         int *hypercubeArray, int *childCount,
+                                         int DIM, int hypercubeCount,
+                                         int *dimNodes);
 
-__host__ void copyNode(optimTreeNode *root, treeNode *linearCurNode, optimTreeNode *optimCurNode, int curDim);
+// Supporting function to copy node data from locality optim tree to fast tree
+__host__ void copyNode(optimTreeNode *root, treeNode *linearCurNode,
+                       optimTreeNode *optimCurNode, int curDim);
 
-__host__ void buildSuperOptimTree(treeNode *linearTree, optimTreeNode *superOptimTree); 
+// Build tree with optimized locality and traversal
+__host__ void buildSuperOptimTree(treeNode *linearTree,
+                                  optimTreeNode *superOptimTree);
 
-__host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity, map <vector<MY_DATATYPE>, vector<int>> hypercubeMap,
+// Function to calculate outlier score
+void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
+                           map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
                            int N, int maxNeighborhoodDensity);
 
+// Function to find min bits required to store hypercube dim
 __host__ int findK(int BIN);
 
-__host__ __device__ int setBitsTo1(int k);
+// Naive approach
+float naiveStrategy(int *d_hypercubeArray, int *h_neighborhoodDensity,
+                    int *h_instancesCount, int distinctHypercubeCount, int BIN,
+                    int DIM);
 
-__global__ void simpleNeighborhoodDensity(int *density, int *instancesCount,
-                                    treeNode *linearTree, int *dimStart,
-                                    int *hypercubeArray, int *childCount, int DIM,
-                                    int hypercubeCount);
+// Locality and traverasl optimized strategy
+__host__ float
+finalOptimTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
+                       int *h_neighborhoodDensity, int *h_instancesCount,
+                       int distinctHypercubeCount, int DIM, int MINSPLIT);
 
-__host__ float simpleTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
+// Locality optimized tree traversal strategy
+__host__ float
+localityOptimTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
+                          int *h_neighborhoodDensity, int *h_instancesCount,
+                          int distinctHypercubeCount, int DIM, int MINSPLIT);
 
-__host__ float localityOptimTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
-
-__host__ float finalOptimTreeStrategy(int* h_hypercubeArray,int*d_hypercubeArray,int*h_neighborhoodDensity, int*h_instancesCount, int distinctHypercubeCount, int DIM, int MINSPLIT);
-
-__host__ float naiveStrategy(int*d_hypercubeArray, int*h_neighborhoodDensity, int* h_instancesCount, int distinctHypercubeCount,int BIN, int DIM);
-
+// Simple tree traversal strategy
+__host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
+                                  int *h_neighborhoodDensity,
+                                  int *h_instancesCount,
+                                  int distinctHypercubeCount, int DIM,
+                                  int MINSPLIT); 
 #endif
