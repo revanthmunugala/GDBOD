@@ -4,13 +4,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <iostream>
+#include <map>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <iostream>
-#include <map>
 #include <string.h>
+#include <unistd.h>
 #include <vector>
 
 using namespace std;
@@ -50,8 +50,7 @@ __host__ void normalizeDataset(double *dataset, int N, int DIM);
 
 // Encode hypercube coordinates
 __device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
-                                int DIM, int index, int encodeBlockSize,
-                                int k);
+                                int DIM, int index, int encodeBlockSize, int k);
 
 // Map points to hypercube and encode
 __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
@@ -76,8 +75,7 @@ __host__ void appendNode(treeNode **rootNode, int startIndex, int endIndex,
 // Build simple tree
 __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
                               int *childCount, int *dimStart, int *curCount,
-                              int curDim, int N, int MINSPLIT, int DIM); 
-
+                              int curDim, int N, int MINSPLIT, int DIM);
 
 // Supporting function to check if the difference between current coordinates is
 // less than 1
@@ -175,5 +173,5 @@ __host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
                                   int *h_neighborhoodDensity,
                                   int *h_instancesCount,
                                   int distinctHypercubeCount, int DIM,
-                                  int MINSPLIT); 
+                                  int MINSPLIT);
 #endif

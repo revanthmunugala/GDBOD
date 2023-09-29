@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
   int N;
   int DIM;
   int BIN;
-  int MINSPLIT; // MINSPLIT = 0 defaults to naive strategy
+  int MINSPLIT;
   int NORMALIZE =
       1; // Set to 1 to normalize datasets - Does not affect timeTrails
   char inputFname[500] = ""; // Dataset
@@ -26,6 +26,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  // Read CL arguments
   sscanf(argv[1], "%d", &N);
   sscanf(argv[2], "%d", &DIM);
   sscanf(argv[3], "%d", &BIN);
@@ -58,23 +59,27 @@ int main(int argc, char **argv) {
   }
 
   // allocate memory for dataset
-  // pointer to entire dataset
-  double *h_dataset = (double *)malloc(sizeof(double) * N * DIM);
+  int totalElements = N * DIM;
+  size_t datasetMemory = sizeof(double) * totalElements;
 
+  double *h_dataset = (double *)malloc(datasetMemory);
+
+  // Import dataset
   int ret = importDataset(inputFname, N, h_dataset, DIM);
 
   if (ret == 1) {
     return 0;
   }
 
+  // Normalize dataset if required
   if (NORMALIZE == 1) {
     normalizeDataset(h_dataset, N, DIM);
   }
 
+  // Record total time execution time
   cudaEvent_t totalTimeStart, totalTimeStop;
   cudaEventCreate(&totalTimeStart);
   cudaEventCreate(&totalTimeStop);
-
   cudaEventRecord(totalTimeStart);
 
   int blockDim = 32;
@@ -88,67 +93,57 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  int totalElements = N * DIM;
-
+  // Supporting variables
+  float totalTime = 0;
+  MY_DATATYPE *d_hypercube = nullptr;
+  double *d_dataset = nullptr;
   int totalElementsPerBlock = blockDim / DIM;
+  int k = findK(BIN);
+  int dimPerBlock = floor((double)(sizeof(MY_DATATYPE) * 8) / (double)k);
+  int encodeBlockSize = ceil((double)DIM / (double)dimPerBlock);
 
+  cudaEvent_t buildHypercubeArrayStart, buildHypercubeArrayStop;
+
+  size_t encodeHypercubeMemory = (sizeof(MY_DATATYPE) * N * encodeBlockSize);
+
+  // Set threads per block
   dim3 dimGrid(ceil((float)N / (float)totalElementsPerBlock), 1, 1);
   dim3 dimBlock(blockDim, 1, 1);
 
-  int k = findK(BIN);
+  // Record hypercube array time
+  cudaEventCreate(&buildHypercubeArrayStart);
+  cudaEventCreate(&buildHypercubeArrayStop);
+  cudaEventRecord(buildHypercubeArrayStart);
 
-  int dimPerBlock = floor((double)(sizeof(MY_DATATYPE) * 8) / (double)k);
-
-  int encodeBlockSize = ceil((double)DIM / (double)dimPerBlock);
-
-  MY_DATATYPE *d_hypercube = nullptr;
-
-  double *d_dataset = nullptr;
-
+  // Allocate memory for encoded hypercube array
   MY_DATATYPE *h_hypercube =
       (MY_DATATYPE *)calloc(encodeBlockSize * N, sizeof(MY_DATATYPE));
 
-  cudaMalloc((void **)&d_hypercube,
-             (sizeof(MY_DATATYPE) * N * encodeBlockSize));
+  // Allocate memory for dataset in device
+  cudaMalloc((void **)&d_dataset, datasetMemory);
 
-  cudaMalloc((void **)&d_dataset, sizeof(double) * totalElements);
+  cudaMemcpy(d_dataset, h_dataset, datasetMemory, cudaMemcpyHostToDevice);
 
-  cudaMemcpy(d_dataset, h_dataset, sizeof(double) * totalElements,
+  // Allocate memory for encoded hypercube array
+  cudaMalloc((void **)&d_hypercube, encodeHypercubeMemory);
+
+  cudaMemcpy(d_hypercube, h_hypercube, encodeHypercubeMemory,
              cudaMemcpyHostToDevice);
 
-  cudaMemcpy(d_hypercube, h_hypercube,
-             (sizeof(MY_DATATYPE) * N * encodeBlockSize),
-             cudaMemcpyHostToDevice);
-
-  // Record time
-  cudaEvent_t createHypercubeStart, createHypercubeStop;
-  cudaEventCreate(&createHypercubeStart);
-  cudaEventCreate(&createHypercubeStop);
-
-  cudaEventRecord(createHypercubeStart);
-
+  // Map points to hypercube and encode
   createHypercube<<<dimGrid, dimBlock,
                     sizeof(int) * totalElementsPerBlock * DIM>>>(
       d_hypercube, d_dataset, N, DIM, BIN, encodeBlockSize, k);
 
-  cudaDeviceSynchronize();
-
-  cudaEventRecord(createHypercubeStop);
-  cudaEventSynchronize(createHypercubeStop);
-
-  // Calculate elapsed time
-  float createHypercubeTime = 0;
-  cudaEventElapsedTime(&createHypercubeTime, createHypercubeStart,
-                       createHypercubeStop);
-
-  cudaMemcpy(h_hypercube, d_hypercube,
-             (sizeof(MY_DATATYPE) * N * encodeBlockSize),
+  // Copy memory from device to host
+  cudaMemcpy(h_hypercube, d_hypercube, (encodeHypercubeMemory),
              cudaMemcpyDeviceToHost);
 
-  // Improve memory util
+  // Free memory
   cudaFree(d_dataset);
   cudaFree(d_hypercube);
 
+  // Use map to remove duplicates and count instances
   map<vector<MY_DATATYPE>, vector<int>> h_hypercube_mapper;
 
   for (int i = 0; i + encodeBlockSize <= N * encodeBlockSize;
@@ -157,29 +152,32 @@ int main(int argc, char **argv) {
     vector<MY_DATATYPE> h_hypercube_key(h_hypercube + i,
                                         h_hypercube + i + encodeBlockSize);
 
+    // If current hypercube is not present, then update map
     if (h_hypercube_mapper.find(h_hypercube_key) == h_hypercube_mapper.end()) {
       vector<int> h_hypercube_instance;
+      // Append new key value pair
       h_hypercube_mapper[h_hypercube_key] = h_hypercube_instance;
     }
 
+    // Update instances
     h_hypercube_mapper[h_hypercube_key].push_back(i / encodeBlockSize);
   }
 
-  int distinctHypercubeCount = 0;
+  // Supporting variables
   MY_DATATYPE *h_hypercubeDistinct = nullptr;
-
+  map<vector<MY_DATATYPE>, vector<int>>::iterator itr;
   int *h_instancesCount = nullptr;
+  int hypercubePos = 0;
+  int distinctHypercubeCount = h_hypercube_mapper.size();
 
-  distinctHypercubeCount = h_hypercube_mapper.size();
-
+  // Allocate memory for encoded hypercube array - distinct
   h_hypercubeDistinct = (MY_DATATYPE *)malloc(
       sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize);
 
+  // Allocate memory for instances count
   h_instancesCount = (int *)malloc(sizeof(int) * distinctHypercubeCount);
 
-  map<vector<MY_DATATYPE>, vector<int>>::iterator itr;
-
-  int hypercubePos = 0;
+  // Copy map key (hypercube) into a linear array
   for (itr = h_hypercube_mapper.begin(); itr != h_hypercube_mapper.end();
        itr++) {
     memcpy(h_hypercubeDistinct + hypercubePos, itr->first.data(),
@@ -188,39 +186,35 @@ int main(int argc, char **argv) {
     hypercubePos += itr->first.size();
   }
 
-  // Building Array of Hypercubes
-
-  printf("Distinct Hypercube Count: %d\n", distinctHypercubeCount);
-
+  // Supporting variables
   totalElements = distinctHypercubeCount * DIM;
-
   MY_DATATYPE *d_hypercubeDistinct;
-
+  float buildHypercubeArrayTime = 0;
+  float neighborhoodDensityTime;
   int *d_hypercubeArray;
+  int maxNeighborhoodDensity = INT_MIN;
 
+  // Memory
+  size_t encodeHypercubeArraySize =
+      sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize;
+  size_t hypercubeArraySize = sizeof(int) * totalElements;
+
+  // Allocate memory for distinct hypercube array
   int *h_hypercubeArray = (int *)malloc(sizeof(int) * totalElements);
 
-  cudaMalloc((void **)&d_hypercubeDistinct,
-             sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize);
+  // Allocate memory for distinct hypercube encodeda array in device and copy
+  // data
+  cudaMalloc((void **)&d_hypercubeDistinct, encodeHypercubeArraySize);
 
-  cudaMalloc((void **)&d_hypercubeArray, sizeof(int) * totalElements);
-
-  cudaMemcpy(d_hypercubeDistinct, h_hypercubeDistinct,
-             sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize,
+  cudaMemcpy(d_hypercubeDistinct, h_hypercubeDistinct, encodeHypercubeArraySize,
              cudaMemcpyHostToDevice);
+
+  // Allocate memory for distinct hypercube array in device
+  cudaMalloc((void **)&d_hypercubeArray, hypercubeArraySize);
 
   dimGrid.x = ceil((float)totalElements / (float)blockDim);
 
-  printf("Grid - %.0f , Block - %d\n",
-         ceil((float)totalElements / (float)blockDim), blockDim);
-
-  // Record time here
-  cudaEvent_t buildHypercubeArrayStart, buildHypercubeArrayStop;
-  cudaEventCreate(&buildHypercubeArrayStart);
-  cudaEventCreate(&buildHypercubeArrayStop);
-
-  cudaEventRecord(buildHypercubeArrayStart);
-
+  // Build hypercube array
   buildHypercubeArray<<<dimGrid, dimBlock>>>(
       d_hypercubeDistinct, d_hypercubeArray, distinctHypercubeCount, DIM,
       encodeBlockSize, k);
@@ -230,15 +224,13 @@ int main(int argc, char **argv) {
   cudaEventRecord(buildHypercubeArrayStop);
   cudaEventSynchronize(buildHypercubeArrayStop);
 
-  float buildHypercubeArrayTime = 0;
   cudaEventElapsedTime(&buildHypercubeArrayTime, buildHypercubeArrayStart,
                        buildHypercubeArrayStop);
 
   int *h_neighborhoodDensity =
       (int *)calloc(distinctHypercubeCount, sizeof(int));
 
-  float neighborhoodDensityTime;
-
+  // Naive approach
   if (APPROACH == 0) {
 
     neighborhoodDensityTime =
@@ -246,30 +238,30 @@ int main(int argc, char **argv) {
                       distinctHypercubeCount, BIN, DIM);
 
   } else {
+    // Simple tree
     if (TREE_SELECT == 1) {
       neighborhoodDensityTime = simpleTreeStrategy(
           h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,
           h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
 
-    } else if (TREE_SELECT == 2) {
+    }
+    // Locality optimized tree
+    else if (TREE_SELECT == 2) {
       neighborhoodDensityTime = localityOptimTreeStrategy(
           h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,
           h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
 
-    } else {
+    }
+    // Locality and traversal optimized tree
+    else {
       neighborhoodDensityTime = finalOptimTreeStrategy(
           h_hypercubeArray, d_hypercubeArray, h_neighborhoodDensity,
           h_instancesCount, distinctHypercubeCount, DIM, MINSPLIT);
     }
   }
 
-  int maxNeighborhoodDensity = INT_MIN;
-
+  // Find max neighborhood density
   for (int i = 0; i < distinctHypercubeCount; i++) {
-
-    if (i < 50)
-      printf("Index - %d - %d\n", i, h_neighborhoodDensity[i]);
-
     if (h_neighborhoodDensity[i] > maxNeighborhoodDensity) {
       maxNeighborhoodDensity = h_neighborhoodDensity[i];
     }
@@ -286,7 +278,6 @@ int main(int argc, char **argv) {
   cudaEventRecord(totalTimeStop);
   cudaEventSynchronize(totalTimeStop);
 
-  float totalTime = 0;
   cudaEventElapsedTime(&totalTime, totalTimeStart, totalTimeStop);
 
   printf("============TIME RESULTS================\n");
