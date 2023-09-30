@@ -61,7 +61,6 @@ int main(int argc, char **argv) {
   // allocate memory for dataset
   int totalElements = N * DIM;
   size_t datasetMemory = sizeof(double) * totalElements;
-
   double *h_dataset = (double *)malloc(datasetMemory);
 
   // Import dataset
@@ -82,32 +81,17 @@ int main(int argc, char **argv) {
   cudaEventCreate(&totalTimeStop);
   cudaEventRecord(totalTimeStart);
 
-  int blockDim = 32;
-
-  while (blockDim <= DIM) {
-    blockDim += 32;
-  }
-
-  if (blockDim > 1024) {
-    printf("\nMax allowed dimensions is 1024");
-    return 0;
-  }
-
   // Supporting variables
   float totalTime = 0;
-  MY_DATATYPE *d_hypercube = nullptr;
+  int *d_hypercube = nullptr;
   double *d_dataset = nullptr;
-  int totalElementsPerBlock = blockDim / DIM;
-  int k = findK(BIN);
-  int dimPerBlock = floor((double)(sizeof(MY_DATATYPE) * 8) / (double)k);
-  int encodeBlockSize = ceil((double)DIM / (double)dimPerBlock);
+  int blockDim = 256;
 
   cudaEvent_t buildHypercubeArrayStart, buildHypercubeArrayStop;
-
-  size_t encodeHypercubeMemory = (sizeof(MY_DATATYPE) * N * encodeBlockSize);
+  size_t hypercubeMemory = (sizeof(int) * totalElements);
 
   // Set threads per block
-  dim3 dimGrid(ceil((float)N / (float)totalElementsPerBlock), 1, 1);
+  dim3 dimGrid(ceil((float)N / (float)blockDim), 1, 1);
   dim3 dimBlock(blockDim, 1, 1);
 
   // Record hypercube array time
@@ -115,42 +99,37 @@ int main(int argc, char **argv) {
   cudaEventCreate(&buildHypercubeArrayStop);
   cudaEventRecord(buildHypercubeArrayStart);
 
-  // Allocate memory for encoded hypercube array
-  MY_DATATYPE *h_hypercube =
-      (MY_DATATYPE *)calloc(encodeBlockSize * N, sizeof(MY_DATATYPE));
+  // Allocate memory for hypercube array
+  int *h_hypercube = (int *)calloc(totalElements, sizeof(int));
 
   // Allocate memory for dataset in device
   cudaMalloc((void **)&d_dataset, datasetMemory);
 
   cudaMemcpy(d_dataset, h_dataset, datasetMemory, cudaMemcpyHostToDevice);
 
-  // Allocate memory for encoded hypercube array
-  cudaMalloc((void **)&d_hypercube, encodeHypercubeMemory);
+  // Allocate memory for hypercube array
+  cudaMalloc((void **)&d_hypercube, hypercubeMemory);
 
-  cudaMemcpy(d_hypercube, h_hypercube, encodeHypercubeMemory,
-             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_hypercube, h_hypercube, hypercubeMemory, cudaMemcpyHostToDevice);
 
-  // Map points to hypercube and encode
-  createHypercube<<<dimGrid, dimBlock,
-                    sizeof(int) * totalElementsPerBlock * DIM>>>(
-      d_hypercube, d_dataset, N, DIM, BIN, encodeBlockSize, k);
+  // Build hypercube array
+  buildNonEncodedHypercubeArray<<<dimGrid, dimBlock>>>(d_hypercube, d_dataset,
+                                                       N, BIN, DIM);
 
   // Copy memory from device to host
-  cudaMemcpy(h_hypercube, d_hypercube, (encodeHypercubeMemory),
+  cudaMemcpy(h_hypercube, d_hypercube, (hypercubeMemory),
              cudaMemcpyDeviceToHost);
-
+  
   // Free memory
   cudaFree(d_dataset);
   cudaFree(d_hypercube);
 
   // Use map to remove duplicates and count instances
-  map<vector<MY_DATATYPE>, vector<int>> h_hypercube_mapper;
+  map<vector<int>, vector<int>> h_hypercube_mapper;
 
-  for (int i = 0; i + encodeBlockSize <= N * encodeBlockSize;
-       i = i + encodeBlockSize) {
+  for (int i = 0; i + DIM <= N * DIM; i = i + DIM) {
 
-    vector<MY_DATATYPE> h_hypercube_key(h_hypercube + i,
-                                        h_hypercube + i + encodeBlockSize);
+    vector<int> h_hypercube_key(h_hypercube + i, h_hypercube + i + DIM);
 
     // If current hypercube is not present, then update map
     if (h_hypercube_mapper.find(h_hypercube_key) == h_hypercube_mapper.end()) {
@@ -160,19 +139,24 @@ int main(int argc, char **argv) {
     }
 
     // Update instances
-    h_hypercube_mapper[h_hypercube_key].push_back(i / encodeBlockSize);
+    h_hypercube_mapper[h_hypercube_key].push_back(i / DIM);
   }
 
   // Supporting variables
-  MY_DATATYPE *h_hypercubeDistinct = nullptr;
-  map<vector<MY_DATATYPE>, vector<int>>::iterator itr;
+  map<vector<int>, vector<int>>::iterator itr;
   int *h_instancesCount = nullptr;
   int hypercubePos = 0;
   int distinctHypercubeCount = h_hypercube_mapper.size();
+  float buildHypercubeArrayTime = 0;
+  float neighborhoodDensityTime;
+  int *d_hypercubeArray;
+  int maxNeighborhoodDensity = INT_MIN;
+  totalElements = distinctHypercubeCount * DIM;
 
-  // Allocate memory for encoded hypercube array - distinct
-  h_hypercubeDistinct = (MY_DATATYPE *)malloc(
-      sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize);
+  size_t hypercubeArraySize = sizeof(int) * totalElements;
+
+  // Allocate memory for distinct hypercube array
+  int *h_hypercubeArray = (int *)malloc(hypercubeArraySize);
 
   // Allocate memory for instances count
   h_instancesCount = (int *)malloc(sizeof(int) * distinctHypercubeCount);
@@ -180,58 +164,28 @@ int main(int argc, char **argv) {
   // Copy map key (hypercube) into a linear array
   for (itr = h_hypercube_mapper.begin(); itr != h_hypercube_mapper.end();
        itr++) {
-    memcpy(h_hypercubeDistinct + hypercubePos, itr->first.data(),
-           sizeof(MY_DATATYPE) * itr->first.size());
+    memcpy(h_hypercubeArray + hypercubePos, itr->first.data(),
+           sizeof(int) * itr->first.size());
     h_instancesCount[hypercubePos / itr->first.size()] = itr->second.size();
     hypercubePos += itr->first.size();
   }
 
-  // Supporting variables
-  totalElements = distinctHypercubeCount * DIM;
-  MY_DATATYPE *d_hypercubeDistinct;
-  float buildHypercubeArrayTime = 0;
-  float neighborhoodDensityTime;
-  int *d_hypercubeArray;
-  int maxNeighborhoodDensity = INT_MIN;
-
-  // Memory
-  size_t encodeHypercubeArraySize =
-      sizeof(MY_DATATYPE) * distinctHypercubeCount * encodeBlockSize;
-  size_t hypercubeArraySize = sizeof(int) * totalElements;
-
-  // Allocate memory for distinct hypercube array
-  int *h_hypercubeArray = (int *)malloc(sizeof(int) * totalElements);
-
-  // Allocate memory for distinct hypercube encodeda array in device and copy
-  // data
-  cudaMalloc((void **)&d_hypercubeDistinct, encodeHypercubeArraySize);
-
-  cudaMemcpy(d_hypercubeDistinct, h_hypercubeDistinct, encodeHypercubeArraySize,
-             cudaMemcpyHostToDevice);
-
   // Allocate memory for distinct hypercube array in device
   cudaMalloc((void **)&d_hypercubeArray, hypercubeArraySize);
 
-  dimGrid.x = ceil((float)totalElements / (float)blockDim);
-
-  // Build hypercube array
-  buildHypercubeArray<<<dimGrid, dimBlock>>>(
-      d_hypercubeDistinct, d_hypercubeArray, distinctHypercubeCount, DIM,
-      encodeBlockSize, k);
+  cudaMemcpy(d_hypercubeArray, h_hypercubeArray, hypercubeArraySize,
+             cudaMemcpyHostToDevice);
 
   cudaDeviceSynchronize();
-
   cudaEventRecord(buildHypercubeArrayStop);
   cudaEventSynchronize(buildHypercubeArrayStop);
 
   cudaEventElapsedTime(&buildHypercubeArrayTime, buildHypercubeArrayStart,
                        buildHypercubeArrayStop);
 
+  // Allocate memory for neighborhood density
   int *h_neighborhoodDensity =
       (int *)calloc(distinctHypercubeCount, sizeof(int));
-
-  // Free memory to fit large datasets in device
-  cudaFree(d_hypercubeDistinct);
 
   // Naive approach
   if (APPROACH == 0) {

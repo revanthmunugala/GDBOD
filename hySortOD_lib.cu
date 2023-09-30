@@ -789,16 +789,33 @@ __host__ void buildSuperOptimTree(treeNode *linearTree,
 }
 
 // Function to calculate outlier score
-void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
+__host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
                            map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
                            int N, int maxNeighborhoodDensity) {
 
-  // Map iterator
-  map<vector<MY_DATATYPE>, vector<int>>::iterator itr;
   int index = 0;
 
   // Calculate neighborhodd density
-  for (itr = hypercubeMap.begin(); itr != hypercubeMap.end(); itr++) {
+  for (auto itr = hypercubeMap.begin(); itr != hypercubeMap.end(); itr++) {
+    for (int i : itr->second) {
+      outlierScore[i] =
+          (float)(maxNeighborhoodDensity - neighborhoodDensity[index]) /
+          (float)(maxNeighborhoodDensity);
+    }
+    index++;
+  }
+
+  return;
+}
+
+__host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
+                           map<vector<int>, vector<int>> hypercubeMap,
+                           int N, int maxNeighborhoodDensity) {
+
+  int index = 0;
+
+  // Calculate neighborhodd density
+  for (auto itr = hypercubeMap.begin(); itr != hypercubeMap.end(); itr++) {
     for (int i : itr->second) {
       outlierScore[i] =
           (float)(maxNeighborhoodDensity - neighborhoodDensity[index]) /
@@ -1254,4 +1271,22 @@ __host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
 
   // Return the time for calculating neighborhood density
   return neighborhoodDensityTime;
+}
+
+// Build hypercube array - Non encoding
+__global__ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset,
+                                              int N, int BIN, int DIM) {
+
+  //int totalElementsPerBlock = N / blockDim.x;
+  int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+  double length = (double)(1) / (double)BIN;
+
+  if (threadId < N) {
+    for (int i = threadId * DIM; i < threadId * DIM + DIM; i++) {
+      hypercube[i] = (int)floor(dataset[i] / length);
+    }
+  }
+
+  return;
 }

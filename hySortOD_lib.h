@@ -1,6 +1,7 @@
 #ifndef HYSORTOD_LIB_H
 #define HYSORTOD_LIB_H
 
+#include <cstdint>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
@@ -16,7 +17,7 @@
 using namespace std;
 
 #define NONE -1
-#define MY_DATATYPE unsigned int
+#define MY_DATATYPE uint64_t
 
 const string approach[] = {"Naive", "Tree"};
 const string treeSelect[] = {"Simple", "Locality optimized",
@@ -144,8 +145,12 @@ __host__ void buildSuperOptimTree(treeNode *linearTree,
                                   optimTreeNode *superOptimTree);
 
 // Function to calculate outlier score
-void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
+__host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
                            map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
+                           int N, int maxNeighborhoodDensity);
+
+__host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
+                           map<vector<int>, vector<int>> hypercubeMap,
                            int N, int maxNeighborhoodDensity);
 
 // Function to find min bits required to store hypercube dim
@@ -174,4 +179,8 @@ __host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
                                   int *h_instancesCount,
                                   int distinctHypercubeCount, int DIM,
                                   int MINSPLIT);
+
+// Build hypercube array - Non encoding
+__global__ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset,
+                                              int N, int BIN, int DIM);
 #endif
