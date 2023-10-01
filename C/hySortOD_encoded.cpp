@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 
   auto buildHypercubeArrayStart = chrono::high_resolution_clock::now();
 
-    // Allocate memory for encoded hypercube array
+  // Allocate memory for encoded hypercube array
   MY_DATATYPE *h_hypercube =
       (MY_DATATYPE *)calloc(encodeBlockSize * N, sizeof(MY_DATATYPE));
 
@@ -189,9 +189,6 @@ int main(int argc, char **argv) {
 
   // Find max neighborhood density
   for (int i = 0; i < distinctHypercubeCount; i++) {
-    if (i < 50) {
-      printf("Index:%d - %d\n", i, h_neighborhoodDensity[i]);
-    }
     if (h_neighborhoodDensity[i] > maxNeighborhoodDensity) {
       maxNeighborhoodDensity = h_neighborhoodDensity[i];
     }

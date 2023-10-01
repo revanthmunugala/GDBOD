@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vector>
+#include <omp.h>
 
 using namespace std;
 

@@ -1,4 +1,5 @@
 #include "hySortOD_lib.h"
+#include <omp.h>
 
 using namespace std;
 
@@ -76,9 +77,9 @@ int main(int argc, char **argv) {
   }
 
   // Record total time execution time
-  auto totalTimeStart = chrono::high_resolution_clock::now();
+  double totalTimeStart = omp_get_wtime();
 
-  auto buildHypercubeArrayStart = chrono::high_resolution_clock::now();
+  double buildHypercubeArrayStart = omp_get_wtime();
 
   // Allocate memory for hypercube array
   int *h_hypercube = (int *)calloc(totalElements, sizeof(int));
@@ -130,11 +131,10 @@ int main(int argc, char **argv) {
     hypercubePos += itr->first.size();
   }
 
-  auto buildHypercubeArrayStop = chrono::high_resolution_clock::now();
+  double buildHypercubeArrayStop = omp_get_wtime();
 
-  chrono::duration<float> buildHypercubeArrayTime =
-      chrono::duration_cast<chrono::duration<float>>(buildHypercubeArrayStop -
-                                                     buildHypercubeArrayStart);
+  float buildHypercubeArrayTime =
+      (float)(buildHypercubeArrayStop - buildHypercubeArrayStart);
 
   // Allocate memory for neighborhood density
   int *h_neighborhoodDensity =
@@ -170,9 +170,6 @@ int main(int argc, char **argv) {
 
   // Find max neighborhood density
   for (int i = 0; i < distinctHypercubeCount; i++) {
-    if (i < 50) {
-      printf("Index:%d - %d\n", i, h_neighborhoodDensity[i]);
-    }
     if (h_neighborhoodDensity[i] > maxNeighborhoodDensity) {
       maxNeighborhoodDensity = h_neighborhoodDensity[i];
     }
@@ -184,18 +181,18 @@ int main(int argc, char **argv) {
   calculateOutlierScore(h_outlierScore, h_neighborhoodDensity,
                         h_hypercube_mapper, N, maxNeighborhoodDensity);
 
-  auto totalTimeStop = chrono::high_resolution_clock::now();
+  double totalTimeStop = omp_get_wtime();
 
-  chrono::duration<float> totalTime =
-      chrono::duration_cast<chrono::duration<float>>(totalTimeStop -
-                                                     totalTimeStart);
+  float totalTime = (float)(totalTimeStop - totalTimeStart);
 
   printf("============TIME RESULTS================\n");
 
-  printf("Total time for execution is %f sec \n", totalTime.count());
+  printf("Total Threads: %d\n", omp_get_max_threads());
+
+  printf("Total time for execution is %f sec \n", totalTime);
 
   printf("Total time for building hypercube is %f sec \n",
-         buildHypercubeArrayTime.count());
+         buildHypercubeArrayTime);
 
   printf("Time for neighborhood density is %f sec \n", neighborhoodDensityTime);
 

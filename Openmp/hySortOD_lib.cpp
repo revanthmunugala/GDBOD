@@ -1,4 +1,5 @@
 #include "hySortOD_lib.h"
+#include <omp.h>
 
 // Import dataset
 int importDataset(char *fname, int N, double *dataset, int DIM) {
@@ -92,10 +93,11 @@ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube, int DIM,
 void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N, int DIM,
                      int BIN, int encodeBlockSize, int k) {
 
-  int *tempHypercube = (int *)malloc(sizeof(int) * DIM);
   double length = (double)(1) / (double)BIN;
 
+#pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < N; i++) {
+    int tempHypercube[DIM];
     for (int j = 0; j < DIM; j++) {
       tempHypercube[j] = (int)floor(dataset[DIM * i + j] / length);
     }
@@ -145,6 +147,7 @@ void buildHypercubeArray(MY_DATATYPE *hypercube, int *hypercubeArray,
                          int hypercubeCount, int DIM, int encodeBlockSize,
                          int k) {
 
+#pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < hypercubeCount; i++) {
 
     decodeHypercube(hypercube + i * encodeBlockSize, hypercubeArray, DIM,
@@ -365,6 +368,7 @@ void neighborhoodDensity(int *density, int *instancesCount,
                          treeNode *linearTree, int *hypercubeArray, int DIM,
                          int hypercubeCount) {
 
+#pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < hypercubeCount; i++) {
     int hypercubeIndex = i;
     int parentIndex = 0;
@@ -384,14 +388,14 @@ void simpleNeighborhoodDensity(int *density, int *instancesCount,
                                treeNode *linearTree, int *hypercubeArray,
                                int DIM, int hypercubeCount) {
 
-  // Assign one thread per distinct hypercube
-  for (int i = 0; i < hypercubeCount; i++) 
-  {
+// Assign one thread per distinct hypercube
+#pragma omp parallel for schedule(dynamic)
+  for (int i = 0; i < hypercubeCount; i++) {
     int parentIndex = 0;
     // Calculate neighborhood density
-    int curDensity = neighborDensitySubTree(
-        hypercubeArray, linearTree, i, instancesCount, parentIndex,
-        0, hypercubeCount, DIM);
+    int curDensity =
+        neighborDensitySubTree(hypercubeArray, linearTree, i, instancesCount,
+                               parentIndex, 0, hypercubeCount, DIM);
     // Update neighborhood density
     density[i] += curDensity;
   }
@@ -569,9 +573,9 @@ int optimNeighborDensitySubTree(int *hypercube, optimTreeNode *linearTree,
 void naiveNeighborhoodDensity(int *density, int *instancesCount, int DIM,
                               int hypercubeCount, int *hypercube) {
 
+#pragma omp parallel for schedule(dynamic)
   for (int j = 0; j < hypercubeCount; j++) {
     int curDensity = 0;
-
     // Do a linear scan and calculate neighborhood density
     for (int i = 0; i < hypercubeCount; i++) {
       if (checkImmediateNeighbor(hypercube + j * DIM, hypercube + i * DIM,
@@ -579,7 +583,6 @@ void naiveNeighborhoodDensity(int *density, int *instancesCount, int DIM,
         curDensity += instancesCount[i];
       }
     }
-
     // Update neighborhood density of one hypercube
     density[j] += curDensity;
   }
@@ -591,6 +594,7 @@ void optimNeighborhoodDensity(int *density, int *instancesCount,
                               optimTreeNode *linearTree, int *hypercubeArray,
                               int DIM, int hypercubeCount) {
 
+#pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < hypercubeCount; i++) {
     int hypercubeIndex = i;
     int parentIndex = 0;
@@ -736,20 +740,16 @@ float naiveStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
   puts("using naive approach");
 
   // Start clock
-  auto neighborhoodDensityStart = chrono::high_resolution_clock::now();
+  double neighborhoodDensityStart = omp_get_wtime();
 
   // Calculate neighborhood density using naive approach
   naiveNeighborhoodDensity(h_neighborhoodDensity, h_instancesCount, DIM,
                            distinctHypercubeCount, h_hypercubeArray);
 
-  auto neighborhoodDensityStop = chrono::high_resolution_clock::now();
-
-  chrono::duration<float> neighborhoodDensityTime =
-      chrono::duration_cast<chrono::duration<float>>(neighborhoodDensityStop -
-                                                     neighborhoodDensityStart);
+  double neighborhoodDensityStop = omp_get_wtime();
 
   // Return the time for calculating neighborhood density
-  return neighborhoodDensityTime.count();
+  return (float)(neighborhoodDensityStop - neighborhoodDensityStart);
 }
 
 // Locality and traverasl optimized strategy
@@ -795,20 +795,16 @@ float finalOptimTreeStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
   buildSuperOptimTree(h_optimizedLinearTree, h_superOptimTree);
 
   // Get timings for neighborhood density
-  auto neighborhoodDensityStart = chrono::high_resolution_clock::now();
+  double neighborhoodDensityStart = omp_get_wtime();
   // Calculate neighborhood density using fast tree
   optimNeighborhoodDensity(h_neighborhoodDensity, h_instancesCount,
                            h_superOptimTree, h_hypercubeArray, DIM,
                            distinctHypercubeCount);
 
-  auto neighborhoodDensityStop = chrono::high_resolution_clock::now();
-
-  chrono::duration<float> neighborhoodDensityTime =
-      chrono::duration_cast<chrono::duration<float>>(neighborhoodDensityStop -
-                                                     neighborhoodDensityStart);
+  double neighborhoodDensityStop = omp_get_wtime();
 
   // Return the time for calculating neighborhood density
-  return neighborhoodDensityTime.count();
+  return (float)(neighborhoodDensityStop - neighborhoodDensityStart);
 }
 
 // Locality optimized tree traversal strategy
@@ -849,20 +845,16 @@ float localityOptimTreeStrategy(int *h_hypercubeArray,
 
   buildOptimizedLinearTree(h_linearTree, h_optimizedLinearTree, h_dimNodes);
 
-  auto neighborhoodDensityStart = chrono::high_resolution_clock::now();
+  double neighborhoodDensityStart = omp_get_wtime();
   // Calculate neighborhood density using locality optimized tree
   neighborhoodDensity(h_neighborhoodDensity, h_instancesCount,
                       h_optimizedLinearTree, h_hypercubeArray, DIM,
                       distinctHypercubeCount);
 
-  auto neighborhoodDensityStop = chrono::high_resolution_clock::now();
-
-  chrono::duration<float> neighborhoodDensityTime =
-      chrono::duration_cast<chrono::duration<float>>(neighborhoodDensityStop -
-                                                     neighborhoodDensityStart);
+  double neighborhoodDensityStop = omp_get_wtime();
 
   // Return the time for calculating neighborhood density
-  return neighborhoodDensityTime.count();
+  return (float)(neighborhoodDensityStop - neighborhoodDensityStart);
 }
 
 // Simple tree traversal strategy
@@ -889,21 +881,17 @@ float simpleTreeStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
                   &linearTreeCount, curDim, distinctHypercubeCount, MINSPLIT,
                   DIM);
 
-  auto neighborhoodDensityStart = chrono::high_resolution_clock::now();
+  double neighborhoodDensityStart = omp_get_wtime();
 
   // Calculate neighborhood density using simple tree
   simpleNeighborhoodDensity(h_neighborhoodDensity, h_instancesCount,
                             h_linearTree, h_hypercubeArray, DIM,
                             distinctHypercubeCount);
 
-  auto neighborhoodDensityStop = chrono::high_resolution_clock::now();
-
-  chrono::duration<float> neighborhoodDensityTime =
-      chrono::duration_cast<chrono::duration<float>>(neighborhoodDensityStop -
-                                                     neighborhoodDensityStart);
+  double neighborhoodDensityStop = omp_get_wtime();
 
   // Return the time for calculating neighborhood density
-  return neighborhoodDensityTime.count();
+  return (float)(neighborhoodDensityStop - neighborhoodDensityStart);
 }
 
 // Build hypercube array - Non encoding
@@ -912,6 +900,7 @@ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset, int N,
 
   double length = (double)(1) / (double)BIN;
 
+#pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < N * DIM; i++) {
     hypercube[i] = (int)floor(dataset[i] / length);
   }
