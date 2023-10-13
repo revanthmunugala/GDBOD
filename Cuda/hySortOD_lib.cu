@@ -278,7 +278,7 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
 // less than 1
 __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                              int curIndex, int curDim) {
-    if (curDim == 0) { return 1 };
+    if (curDim == 0) { return 1;}
     int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
     if (curDif <= 1) {
         return 1;
@@ -624,7 +624,7 @@ __device__ int optimNeighborDensitySubTree(int *hypercube,
 
         // Move to child node if present
         if (linearTree[curHypercubeIndex].nextChildIndex != NONE &&
-            optimCheckNeighbor(index, hypercube, linearTree, curHypercubeIndex, curDim) {
+            optimCheckNeighbor(index, hypercube, linearTree, curHypercubeIndex, curDim)) {
             curHypercubeIndex = linearTree[curHypercubeIndex].nextChildIndex;
         }
             // Move to node pointed by break index if there is no child node
