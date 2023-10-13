@@ -263,7 +263,7 @@ void buildLinearTree(int *hypercube, treeNode **linearTree, int *childCount,
 int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                   int curIndex, int curDim) {
 
-    if (curDim == 0) { return 1 };
+    if (curDim == 0) { return 1; }
     int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
     if (curDif <= 1) {
         return 1;
@@ -916,6 +916,10 @@ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset, int N,
                                    int BIN, int DIM) {
 
     double length = (double) (1) / (double) BIN;
-
+    
     for (int i = 0; i < N * DIM; i++) {
-        hypercube[i] = (int) floor(dataset[i]
+        hypercube[i] = (int) floor(dataset[i] / length);
+    }
+
+    return;
+}
