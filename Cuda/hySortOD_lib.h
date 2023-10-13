@@ -24,21 +24,21 @@ const string treeSelect[] = {"Simple", "Locality optimized",
                              "Locality and traversal optimized"};
 
 typedef struct treeNode {
-  int coordinate;
-  int startIndex;
-  int endIndex;
-  int nextSiblingIndex;
-  int nextChildIndex;
-  int parentIndex;
+    int coordinate;
+    int startIndex;
+    int endIndex;
+    int nextSiblingIndex;
+    int nextChildIndex;
+    int parentIndex;
 } treeNode;
 
 typedef struct optimTreeNode {
-  int coordinate;
-  int startIndex;
-  int endIndex;
-  int nextChildIndex;
-  int nextBreakIndex;
-  int curDim;
+    int coordinate;
+    int startIndex;
+    int endIndex;
+    int nextChildIndex;
+    int nextBreakIndex;
+    int curDim;
 } optimTreeNode;
 
 #include "hySortOD_lib.h"
@@ -56,8 +56,11 @@ __device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
 // Map points to hypercube and encode
 __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
                                 int DIM, int BIN, int encodeBlockSize, int k);
+
 // Return number with k bits set to 1
-__host__ __device__ int setBitsTo1(int k);
+__host__ __device__
+
+int setBitsTo1(int k);
 
 // Decode encoded hypercube into hypercube array
 __device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
@@ -146,12 +149,12 @@ __host__ void buildSuperOptimTree(treeNode *linearTree,
 
 // Function to calculate outlier score
 __host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
-                           map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
-                           int N, int maxNeighborhoodDensity);
+                                    map <vector<MY_DATATYPE>, vector<int>> hypercubeMap,
+                                    int N, int maxNeighborhoodDensity);
 
 __host__ void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
-                           map<vector<int>, vector<int>> hypercubeMap,
-                           int N, int maxNeighborhoodDensity);
+                                    map <vector<int>, vector<int>> hypercubeMap,
+                                    int N, int maxNeighborhoodDensity);
 
 // Function to find min bits required to store hypercube dim
 __host__ int findK(int BIN);
@@ -183,4 +186,5 @@ __host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
 // Build hypercube array - Non encoding
 __global__ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset,
                                               int N, int BIN, int DIM);
+
 #endif

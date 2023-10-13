@@ -23,21 +23,21 @@ const string treeSelect[] = {"Simple", "Locality optimized",
                              "Locality and traversal optimized"};
 
 typedef struct treeNode {
-  int coordinate;
-  int startIndex;
-  int endIndex;
-  int nextSiblingIndex;
-  int nextChildIndex;
-  int parentIndex;
+    int coordinate;
+    int startIndex;
+    int endIndex;
+    int nextSiblingIndex;
+    int nextChildIndex;
+    int parentIndex;
 } treeNode;
 
 typedef struct optimTreeNode {
-  int coordinate;
-  int startIndex;
-  int endIndex;
-  int nextChildIndex;
-  int nextBreakIndex;
-  int curDim;
+    int coordinate;
+    int startIndex;
+    int endIndex;
+    int nextChildIndex;
+    int nextBreakIndex;
+    int curDim;
 } optimTreeNode;
 
 #include "hySortOD_lib.h"
@@ -118,6 +118,7 @@ int optimCheckNeighbor(int index, int *hypercube, optimTreeNode *linearTree,
 int optimNeighborDensitySubTree(int *hypercube, optimTreeNode *linearTree,
                                 int hypercubeIndex, int *instancesCount,
                                 int parentIndex, int N, int DIM);
+
 // Calculate neighborhood density using naive apprach
 void naiveNeighborhoodDensity(int *density, int *instancesCount, int DIM,
                               int hypercubeCount, int *hypercube);
@@ -136,11 +137,11 @@ void buildSuperOptimTree(treeNode *linearTree, optimTreeNode *superOptimTree);
 
 // Function to calculate outlier score
 void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
-                           map<vector<MY_DATATYPE>, vector<int>> hypercubeMap,
+                           map <vector<MY_DATATYPE>, vector<int>> hypercubeMap,
                            int N, int maxNeighborhoodDensity);
 
 void calculateOutlierScore(float *outlierScore, int *neighborhoodDensity,
-                           map<vector<int>, vector<int>> hypercubeMap, int N,
+                           map <vector<int>, vector<int>> hypercubeMap, int N,
                            int maxNeighborhoodDensity);
 
 // Function to find min bits required to store hypercube dim
@@ -162,6 +163,7 @@ float localityOptimTreeStrategy(int *h_hypercubeArray,
                                 int *h_instancesCount,
                                 int distinctHypercubeCount, int DIM,
                                 int MINSPLIT);
+
 // Simple tree traversal strategy
 float simpleTreeStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
                          int *h_instancesCount, int distinctHypercubeCount,
@@ -170,4 +172,5 @@ float simpleTreeStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
 // Build hypercube array - Non encoding
 void buildNonEncodedHypercubeArray(int *hypercube, double *dataset, int N,
                                    int BIN, int DIM);
+
 #endif
