@@ -853,7 +853,8 @@ float naiveStrategy(int *d_hypercubeArray, int *h_neighborhoodDensity,
     int *d_neighborhoodDensity = NULL;
     int *d_instancesCount = NULL;
 
-    int SPLIT = BIN;
+    // Setting split to 8 - optimized threads per linear scan
+    int SPLIT = 8;
     float neighborhoodDensityTime;
 
     dim3 dimBlock, dimGrid;
