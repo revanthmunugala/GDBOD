@@ -73,7 +73,7 @@ __host__ void normalizeDataset(double *dataset, int N, int DIM) {
 }
 
 // Encode current hypercube coordinates
-__device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
+__inline__ __device__ void encodeHypercube(MY_DATATYPE *curHypercube, int *hypercube,
                                 int DIM, int index, int encodeBlockSize,
                                 int k) {
     int idx = 0;
@@ -123,7 +123,7 @@ __global__ void createHypercube(MY_DATATYPE *hypercube, double *dataset, int N,
 __host__ __device__ int setBitsTo1(int k) { return pow(2, k) - 1; }
 
 // Decode encoded hypercube into hypercube array
-__device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
+__inline__ __device__ void decodeHypercube(MY_DATATYPE *hypercubeEncodedArray,
                                 int *hypercube, int DIM, int hypercubeCount,
                                 int threadId, int encodeBlockSize, int k) {
 
@@ -276,7 +276,7 @@ __host__ void buildLinearTree(int *hypercube, treeNode **linearTree,
 
 // Supporting function to check if the difference between current coordinates is
 // less than 1
-__device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
+__inline__ __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
                              int curIndex, int curDim) {
     if (curDim == 0) { return 1;}
     int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
@@ -287,7 +287,7 @@ __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
 }
 
 // Supporting function to check if current hypercube is an immediate neighbor
-__device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
+__inline__ __device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
                                       int hypercubeCount, int DIM) {
 
     for (int i = 0; i < DIM; i++) {
@@ -582,7 +582,7 @@ void buildOptimizedLinearTree(treeNode *linearTree,
 }
 
 // Supporting function
-__device__ int optimCheckNeighbor(int index, int *hypercube,
+__inline__ __device__ int optimCheckNeighbor(int index, int *hypercube,
                                   optimTreeNode *linearTree, int curIndex, int curDim) {
     if (curDim == 0) { return 1; }
     int curDif = abs(hypercube[index] - linearTree[curIndex].coordinate);
@@ -593,7 +593,7 @@ __device__ int optimCheckNeighbor(int index, int *hypercube,
 }
 
 // Calculate neighborhood density of subtree
-__device__ int optimNeighborDensitySubTree(int *hypercube,
+__inline__ __device__ int optimNeighborDensitySubTree(int *hypercube,
                                            optimTreeNode *linearTree,
                                            int hypercubeIndex,
                                            int *instancesCount, int parentIndex,
