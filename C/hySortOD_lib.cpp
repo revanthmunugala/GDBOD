@@ -273,7 +273,9 @@ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
 
 // Supporting function to check if current hypercube is an immediate neighbor
 int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB, int hypercubeCount,
-                           int DIM) {
+                           int DIM, int curDim) {
+
+    curDim = (curDim > 0) ? curDim - 1 : curDim;
 
     for (int i = 0; i < DIM; i++) {
         if (abs(hypercubeA[i] - hypercubeB[i]) > 1) {
@@ -307,7 +309,7 @@ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
 
                 // Check if current hypercube is an immediate neighbor
                 if (checkImmediateNeighbor(hypercube + hypercubeIndex * DIM,
-                                           hypercube + i * DIM, N, DIM)) {
+                                           hypercube + i * DIM, N, DIM, curDim)) {
                     curDensity += instancesCount[i];
                 }
             }
@@ -549,7 +551,7 @@ int optimNeighborDensitySubTree(int *hypercube, optimTreeNode *linearTree,
 
                 // Check if current node is an immediate neighbor
                 if (checkImmediateNeighbor(hypercube + hypercubeIndex * DIM,
-                                           hypercube + i * DIM, N, DIM)) {
+                                           hypercube + i * DIM, N, DIM, curDim)) {
                     curDensity += instancesCount[i];
                 }
             }

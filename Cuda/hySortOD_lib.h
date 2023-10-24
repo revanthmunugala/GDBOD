@@ -88,7 +88,7 @@ __device__ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
 
 // Supporting function to check if current hypercube is an immediate neighbor
 __device__ int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB,
-                                      int hypercubeCount, int DIM);
+                                      int hypercubeCount, int DIM, int curDim=0);
 
 // Neighborhood density of subtree - locality optimixzed
 __device__ int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
