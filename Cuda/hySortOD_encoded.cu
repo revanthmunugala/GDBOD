@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
     // Allocate memory for distinct hypercube array
     int *h_hypercubeArray = (int *) malloc(sizeof(int) * totalElements);
 
-    // Allocate memory for distinct hypercube encodeda array in device and copy
+    // Allocate memory for distinct hypercube encoded array in device and copy
     // data
     cudaMalloc((void **) &d_hypercubeDistinct, encodeHypercubeArraySize);
 

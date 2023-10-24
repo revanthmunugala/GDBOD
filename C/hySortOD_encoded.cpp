@@ -189,8 +189,8 @@ int main(int argc, char **argv) {
     }
 
     // Find max neighborhood density
-    for (int i = 0; i < distinctHypercubeCount; i++) {
-        printf("Index:%d - %d\n",i,h_neighborhoodDensity[i]);
+    for (int i = 0; i < distinctHypercubeCount; i++)
+    {
         if (h_neighborhoodDensity[i] > maxNeighborhoodDensity) {
             maxNeighborhoodDensity = h_neighborhoodDensity[i];
         }
