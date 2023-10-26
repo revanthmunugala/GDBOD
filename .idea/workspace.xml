@@ -1,12 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="CMakeSettings">
     <configurations>
       <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e250c3d2-40de-48fb-922d-2bc0ce2c261e" name="Changes" comment="" />
+    <list default="true" id="e250c3d2-40de-48fb-922d-2bc0ce2c261e" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/C/.idea/C.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/C/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/C/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/C/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/C/hySortOD_encoded.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/C/hySortOD_encoded.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/C/hySortOD_lib.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/C/hySortOD_lib.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/C/hySortOD_lib.h" beforeDir="false" afterPath="$PROJECT_DIR$/C/hySortOD_lib.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/C/hySortOD_non_encoded.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/C/hySortOD_non_encoded.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cuda/hySortOD_encoded.cu" beforeDir="false" afterPath="$PROJECT_DIR$/Cuda/hySortOD_encoded.cu" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cuda/hySortOD_lib.cu" beforeDir="false" afterPath="$PROJECT_DIR$/Cuda/hySortOD_lib.cu" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cuda/hySortOD_lib.h" beforeDir="false" afterPath="$PROJECT_DIR$/Cuda/hySortOD_lib.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cuda/hySortOD_non_encoded.cu" beforeDir="false" afterPath="$PROJECT_DIR$/Cuda/hySortOD_non_encoded.cu" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Openmp/hySortOD_encoded.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Openmp/hySortOD_encoded.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Openmp/hySortOD_lib.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Openmp/hySortOD_lib.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Openmp/hySortOD_lib.h" beforeDir="false" afterPath="$PROJECT_DIR$/Openmp/hySortOD_lib.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Openmp/hySortOD_non_encoded.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/Openmp/hySortOD_non_encoded.cpp" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -18,9 +40,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="2XEBgbBHdUyMTo4E4FIHoIQarIl" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -36,6 +58,10 @@
     "cidr.known.project.marker": "true",
     "git-widget-placeholder": "main",
     "last_opened_file_path": "C:/Users/rm2878/Desktop/HySortOD_",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "vue.rearranger.settings.migration": "true"
   }
@@ -49,6 +75,9 @@
       <option name="presentableId" value="Default" />
       <updated>1698184470691</updated>
       <workItem from="1698184471710" duration="96000" />
+      <workItem from="1698273521022" duration="25000" />
+      <workItem from="1698273587386" duration="23000" />
+      <workItem from="1698273737826" duration="5330000" />
     </task>
     <servers />
   </component>

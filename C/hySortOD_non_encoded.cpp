@@ -78,6 +78,9 @@ int main(int argc, char **argv) {
     // Record total time execution time
     auto totalTimeStart = chrono::high_resolution_clock::now();
 
+    // Reorder dimensions in the dataset by variance
+    h_dataset = reorderByDimensions(h_dataset, N, DIM);
+
     auto buildHypercubeArrayStart = chrono::high_resolution_clock::now();
 
     // Allocate memory for hypercube array

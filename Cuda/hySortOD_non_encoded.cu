@@ -81,6 +81,9 @@ int main(int argc, char **argv) {
     cudaEventCreate(&totalTimeStop);
     cudaEventRecord(totalTimeStart);
 
+    // Reorder dimensions in the dataset by variance
+    h_dataset = reorderByDimensions(h_dataset, N, DIM);
+
     // Supporting variables
     float totalTime = 0;
     int *d_hypercube = nullptr;

@@ -13,6 +13,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
+#include <omp.h>
 
 using namespace std;
 
@@ -187,4 +189,6 @@ __host__ float simpleTreeStrategy(int *h_hypercubeArray, int *d_hypercubeArray,
 __global__ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset,
                                               int N, int BIN, int DIM);
 
+// Reorder dimensions based on variance
+__host__ double*reorderByDimensions(double*dataset, int N, int DIM);
 #endif

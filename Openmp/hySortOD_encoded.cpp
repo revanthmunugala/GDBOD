@@ -78,6 +78,9 @@ int main(int argc, char **argv) {
     // Record total time execution time
     double totalTimeStart = omp_get_wtime();
 
+    // Reorder dimensions in the dataset by variance
+    h_dataset = reorderByDimensions(h_dataset, N, DIM);
+
     // Supporting variables
     int k = findK(BIN);
     int dimPerBlock = floor((double) (sizeof(MY_DATATYPE) * 8) / (double) k);

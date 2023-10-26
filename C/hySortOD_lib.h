@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -171,5 +172,8 @@ float simpleTreeStrategy(int *h_hypercubeArray, int *h_neighborhoodDensity,
 // Build hypercube array - Non encoding
 void buildNonEncodedHypercubeArray(int *hypercube, double *dataset, int N,
                                    int BIN, int DIM);
+
+// Reorder dimensions based on variance
+double*reorderByDimensions(double*dataset, int N, int DIM);
 
 #endif
