@@ -290,6 +290,8 @@ int main(int argc, char **argv) {
 
     printf("============TIME RESULTS================\n");
 
+    printf("Total threads: %d\n", omp_get_max_threads());
+
     printf("Total time for execution is %f sec \n", (totalTime / 1000));
 
     printf("Total time for building hypercube is %f sec \n",
