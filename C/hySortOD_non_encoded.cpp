@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     auto totalTimeStart = chrono::high_resolution_clock::now();
 
     // Reorder dimensions in the dataset by variance
-    h_dataset = reorderByDimensions(h_dataset, N, DIM);
+    // h_dataset = reorderByDimensions(h_dataset, N, DIM);
 
     auto buildHypercubeArrayStart = chrono::high_resolution_clock::now();
 

@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     double totalTimeStart = omp_get_wtime();
 
     // Reorder dimensions in the dataset by variance
-    h_dataset = reorderByDimensions(h_dataset, N, DIM);
+    // h_dataset = reorderByDimensions(h_dataset, N, DIM);
 
     double buildHypercubeArrayStart = omp_get_wtime();
 
