@@ -86,9 +86,9 @@ int checkNeighbor(int index, int *hypercube, treeNode *linearTree,
 
 // Supporting function to check if current hypercube is an immediate neighbor
 int checkImmediateNeighbor(int *hypercubeA, int *hypercubeB, int hypercubeCount,
-                           int DIM, int curDim=0);
+                           int DIM);
 
-// Neighborhood density of subtree - locality optimixzed
+// Neighborhood density of subtree - locality optimized
 int neighborDensitySubTree(int *hypercube, treeNode *linearTree,
                            int hypercubeIndex, int *instancesCount,
                            int parentIndex, int curDim, int N, int DIM);
