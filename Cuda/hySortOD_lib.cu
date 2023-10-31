@@ -1298,8 +1298,8 @@ __global__ void buildNonEncodedHypercubeArray(int *hypercube, double *dataset,
 // Reorder dimensions based on variance
 __host__ double *reorderByDimensions(double *dataset, int N, int DIM) {
     double mean, devmean;
-    vector <pair<double, int>> devDimPair;
-    double *tempDataset = (double *) malloc(sizeof(double) * N * DIM);
+    vector<pair<double, int>> devDimPair;
+    double *tempDataset = (double *)malloc(sizeof(double) * N * DIM);
     int sampleSize, sampledPoints;
 
     // Set default sampling size as 100
@@ -1332,15 +1332,37 @@ __host__ double *reorderByDimensions(double *dataset, int N, int DIM) {
         devDimPair.emplace_back(sqrt(devmean), i);
     }
 
-    sort(devDimPair.begin(), devDimPair.end(), greater<>());
+    mean = 0;
+    devmean = 0;
 
-    #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < DIM; j++) {
-            tempDataset[i * DIM + j] = dataset[i * DIM + devDimPair[j].second];
+    for (int i = 0; i < DIM; i++) {
+        mean += devDimPair[i].first;
+    }
+    mean /= DIM;
+
+    for (int i = 0; i < DIM; i++) {
+        devmean += pow(devDimPair[i].first - mean, 2);
+    }
+    devmean /= DIM;
+
+    double coeffOfVariance = (sqrt(devmean)/mean)*100;
+
+    if (coeffOfVariance > 30)
+    {
+        puts("Dimensions are reordered");
+        sort(devDimPair.begin(), devDimPair.end(), greater<>());
+
+        #pragma omp parallel for
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < DIM; j++) {
+                tempDataset[i * DIM + j] = dataset[i * DIM + devDimPair[j].second];
+            }
         }
+        free(dataset);
+        return tempDataset;
     }
 
-    free(dataset);
-    return tempDataset;
+    puts("Dimensions are NOT reordered");
+    free(tempDataset);
+    return dataset;
 }
