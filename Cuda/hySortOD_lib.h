@@ -20,6 +20,7 @@ using namespace std;
 
 #define NONE -1
 #define MY_DATATYPE uint64_t
+#define CV_THRESHOLD 35
 
 const string approach[] = {"Naive", "Tree"};
 const string treeSelect[] = {"Simple", "Locality optimized",

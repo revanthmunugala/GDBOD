@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     cudaEventRecord(totalTimeStart);
 
     // Reorder dimensions in the dataset by variance
-    // h_dataset = reorderByDimensions(h_dataset, N, DIM);
+    h_dataset = reorderByDimensions(h_dataset, N, DIM);
 
     int blockDim = 32;
 

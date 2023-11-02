@@ -975,8 +975,9 @@ double *reorderByDimensions(double *dataset, int N, int DIM) {
     devmean /= DIM;
 
     double coeffOfVariance = (sqrt(devmean)/mean)*100;
+    printf("Mean = %.3lf SD = %.3lf CV = %lf\n",mean,sqrt(devmean),coeffOfVariance);
 
-    if (coeffOfVariance > 30)
+    if (coeffOfVariance >= CV_THRESHOLD)
     {
         puts("Dimensions are reordered");
         sort(devDimPair.begin(), devDimPair.end(), greater<>());
