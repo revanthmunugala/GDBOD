@@ -26,10 +26,10 @@ We also propose:
 
 - Sequential CPU algorithm achieves a **mean speedup of 18.35×** over the state-of-the-art.
 - Parallel GPU algorithm achieves a **mean speedup of 3.29×** over the multi-core CPU algorithm across 6 real-world datasets.
-- With GPU optimizations, we achieve:
-  - **Peak compute throughput**: 86.51%
-  - **L1 cache hits**: 92.06%
-  - **L2 cache hits**: 92.94%
+- With all optimizations, on A100, for SuSy dataset, we achieve:
+  - **Peak compute throughput**: 89.52%
+  - **L1 cache hits**: 91.90%
+  - **L2 cache hits**: 99.78%
 
 ---
 
